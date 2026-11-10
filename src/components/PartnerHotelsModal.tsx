@@ -17,7 +17,7 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-import { HOTEL_CATEGORIES, PartnerHotel, VOYA_LANKA_PARTNER_HOTELS } from '../types';
+import { HOTEL_CATEGORIES, PartnerHotel, UserProfile, VOYA_LANKA_PARTNER_HOTELS } from '../types';
 import {
   addPartnerHotel,
   deletePartnerHotel,
@@ -25,9 +25,18 @@ import {
   restoreDefaultPartnerHotels,
   updatePartnerHotel
 } from '../utils/storage';
+import {
+  addPartnerHotelToCloud,
+  deletePartnerHotelFromCloud,
+  fetchPartnerHotels,
+  restoreDefaultPartnerHotelsCloud,
+  updatePartnerHotelInCloud
+} from '../utils/supabaseStorage';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 interface PartnerHotelsModalProps {
   isOpen: boolean;
+  currentUser?: UserProfile | null;
   initialQuery?: string;
   onClose: () => void;
   onSelectHotel?: (hotelNameFormatted: string, category: string) => void;
@@ -56,11 +65,13 @@ const COMMON_DESTINATIONS = [
 
 export const PartnerHotelsModal: React.FC<PartnerHotelsModalProps> = ({
   isOpen,
+  currentUser,
   initialQuery = '',
   onClose,
   onSelectHotel,
   showToast
 }) => {
+  const isAdmin = !currentUser || currentUser.role === 'ADMIN';
   // Form fields
   const [name, setName] = useState('');
   const [destination, setDestination] = useState('');
@@ -88,8 +99,13 @@ export const PartnerHotelsModal: React.FC<PartnerHotelsModalProps> = ({
   const formRef = useRef<HTMLDivElement>(null);
 
   // Load hotels
-  const refreshHotels = () => {
-    setHotelsList(getAllPartnerHotels());
+  const refreshHotels = async () => {
+    if (isSupabaseConfigured()) {
+      const list = await fetchPartnerHotels();
+      setHotelsList(list);
+    } else {
+      setHotelsList(getAllPartnerHotels());
+    }
   };
 
   useEffect(() => {
@@ -510,15 +526,17 @@ export const PartnerHotelsModal: React.FC<PartnerHotelsModalProps> = ({
                   </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setIsRestoreConfirmOpen(true)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-slate-400 hover:text-slate-200 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded-lg transition-colors cursor-pointer"
-                  title="Reset to default Voya Lanka partner hotels catalog"
-                >
-                  <RotateCcw className="w-3 h-3 text-slate-400" />
-                  <span>Restore Defaults</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsRestoreConfirmOpen(true)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-slate-400 hover:text-slate-200 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded-lg transition-colors cursor-pointer"
+                    title="Reset to default Voya Lanka partner hotels catalog (Admin only)"
+                  >
+                    <RotateCcw className="w-3 h-3 text-slate-400" />
+                    <span>Restore Defaults</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -611,15 +629,17 @@ export const PartnerHotelsModal: React.FC<PartnerHotelsModalProps> = ({
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Delete Button - works reliably with in-UI confirmation modal */}
-                        <button
-                          type="button"
-                          onClick={() => setDeletingHotel(h)}
-                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                          title="Delete from partner directory"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Delete Button - Admin only */}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingHotel(h)}
+                            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                            title="Delete from partner directory (Admin only)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

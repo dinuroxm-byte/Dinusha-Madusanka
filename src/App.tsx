@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccommodationSection } from './components/AccommodationSection';
+import { AuthModal } from './components/AuthModal';
 import { ChargesSection } from './components/ChargesSection';
 import { CompanyModal } from './components/CompanyModal';
 import { CustomerDatabaseModal } from './components/CustomerDatabaseModal';
@@ -15,9 +16,12 @@ import { PrintModal } from './components/PrintModal';
 import { SavedModal } from './components/SavedModal';
 import { TermsSection } from './components/TermsSection';
 import { TransportationSection } from './components/TransportationSection';
+import { UserManagementModal } from './components/UserManagementModal';
 import { VoucherModal } from './components/VoucherModal';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
+import { isSupabaseConfigured, supabase } from './lib/supabase';
 import {
+  CloudSyncStatus,
   CompanyDetails,
   CustomerDetails,
   CustomerRecord,
@@ -36,8 +40,21 @@ import {
   SavedQuotation,
   ShareableQuotationData,
   TermsConfig,
-  TransportDetails
+  TransportDetails,
+  UserProfile
 } from './types';
+import {
+  clearAllQuotationsFromCloud,
+  deleteQuotationFromCloud,
+  fetchCompanySettings,
+  fetchCustomers,
+  fetchQuotations,
+  fetchUserProfile,
+  saveQuotationToCloud,
+  saveUserDraftToCloud,
+  subscribeToCloudChanges,
+  updateCompanySettings
+} from './utils/supabaseStorage';
 import {
   computePricing,
   formatLKR,
@@ -221,6 +238,11 @@ export default function App() {
   }, []);
 
   // 2. UI Modals & Online View State
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>('connected');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
+
   const [isSavedModalOpen, setIsSavedModalOpen] = useState(false);
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isItineraryModalOpen, setIsItineraryModalOpen] = useState(false);
@@ -242,24 +264,122 @@ export default function App() {
     setToastMessage(msg);
   }, []);
 
+  const handleSignOut = async () => {
+    if (isSupabaseConfigured()) {
+      await supabase.auth.signOut();
+    }
+    setCurrentUser(null);
+    showToast('Signed out of company workspace.');
+  };
 
-
-  useEffect(() => {
-    if (!toastMessage) return;
-    const t = setTimeout(() => setToastMessage(null), 3000);
-    return () => clearTimeout(t);
-  }, [toastMessage]);
-
-  useEffect(() => {
-    const handleToastEvent = (e: Event) => {
-      const customEvent = e as CustomEvent<string>;
-      if (customEvent.detail) {
-        showToast(customEvent.detail);
+  const loadAllDataFromCloud = useCallback(async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      setSyncStatus('syncing');
+      const [cloudQuotes, cloudCusts, cloudSettings] = await Promise.all([
+        fetchQuotations(),
+        fetchCustomers(),
+        fetchCompanySettings()
+      ]);
+      setSavedQuotes(cloudQuotes);
+      setCustomers(cloudCusts);
+      if (cloudSettings) {
+        setCompany(cloudSettings.company);
+        setTerms(cloudSettings.terms);
+        if (cloudSettings.logo) setLogo(cloudSettings.logo);
       }
+      setSyncStatus('connected');
+    } catch (err) {
+      console.error('Error loading cloud data:', err);
+      setSyncStatus('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setSyncStatus('offline');
+      // When Supabase credentials are not set, provide local admin preview
+      setCurrentUser({
+        id: 'local_admin',
+        email: 'admin@voyalankatours.com',
+        fullName: 'Voya Lanka Administrator',
+        role: 'ADMIN'
+      });
+      return;
+    }
+
+    setSyncStatus('syncing');
+
+    // 1. Initial auth check
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user.id);
+        setCurrentUser(
+          profile || {
+            id: session.user.id,
+            email: session.user.email || '',
+            fullName: session.user.user_metadata?.full_name || 'Staff Member',
+            role: 'STAFF'
+          }
+        );
+        loadAllDataFromCloud();
+      } else {
+        setCurrentUser(null);
+        setSyncStatus('connected');
+      }
+    });
+
+    // 2. Auth changes listener
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user.id);
+        setCurrentUser(
+          profile || {
+            id: session.user.id,
+            email: session.user.email || '',
+            fullName: session.user.user_metadata?.full_name || 'Staff Member',
+            role: 'STAFF'
+          }
+        );
+        loadAllDataFromCloud();
+      } else {
+        setCurrentUser(null);
+        setSyncStatus('connected');
+      }
+    });
+
+    // 3. Realtime PostgreSQL change listener
+    const unsubscribeRealtime = subscribeToCloudChanges({
+      onQuotationsChange: async () => {
+        setSyncStatus('syncing');
+        const qList = await fetchQuotations();
+        setSavedQuotes(qList);
+        setSyncStatus('connected');
+      },
+      onCustomersChange: async () => {
+        setSyncStatus('syncing');
+        const cList = await fetchCustomers();
+        setCustomers(cList);
+        setSyncStatus('connected');
+      },
+      onHotelsChange: () => {
+        window.dispatchEvent(new CustomEvent('voya_partner_hotels_updated'));
+      },
+      onCompanySettingsChange: async () => {
+        const cs = await fetchCompanySettings();
+        setCompany(cs.company);
+        setTerms(cs.terms);
+        if (cs.logo) setLogo(cs.logo);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      unsubscribeRealtime();
     };
-    window.addEventListener('voya_show_toast', handleToastEvent);
-    return () => window.removeEventListener('voya_show_toast', handleToastEvent);
-  }, [showToast]);
+  }, [loadAllDataFromCloud]);
 
   // Check URL on mount for shareable proposal link
   useEffect(() => {
@@ -693,7 +813,7 @@ export default function App() {
   };
 
   // Handler: Save Quotation Record
-  const handleSaveQuote = () => {
+  const handleSaveQuote = async () => {
     const record: SavedQuotation = {
       id: customer.qno,
       savedAt: new Date().toISOString(),
@@ -713,17 +833,29 @@ export default function App() {
       finUSDn: Math.round(breakdown.usd * 100) / 100
     };
 
+    setSyncStatus('syncing');
+
+    if (isSupabaseConfigured()) {
+      const cloudRes = await saveQuotationToCloud(record, currentUser);
+      if (!cloudRes.success) {
+        showToast(cloudRes.message);
+        setSyncStatus('error');
+        return;
+      }
+    }
+
     const updated = saveSingleQuote(record);
     setSavedQuotes(updated);
 
     // Refresh customers list state
     setCustomers(loadCustomers());
+    setSyncStatus('connected');
 
-    showToast(`Quotation ${record.id} saved to repository & customer updated!`);
+    showToast(`Quotation ${record.id} saved to cloud repository!`);
   };
 
   // Handler: Save Customer Directly to CRM Database
-  const handleSaveCustomerToCRM = () => {
+  const handleSaveCustomerToCRM = async () => {
     if (!customer.custName?.trim()) {
       showToast('Please enter a Customer Full Name before saving to CRM.');
       return;
@@ -750,16 +882,43 @@ export default function App() {
   };
 
   // Handler: Delete Saved Quote
-  const handleDeleteSavedQuote = (id: string) => {
+  const handleDeleteSavedQuote = async (id: string) => {
+    if (currentUser && currentUser.role !== 'ADMIN') {
+      showToast('Permission denied: Only administrators can delete quotation records.');
+      return;
+    }
+
+    setSyncStatus('syncing');
+    if (isSupabaseConfigured()) {
+      const res = await deleteQuotationFromCloud(id);
+      if (!res.success) {
+        showToast(res.message);
+        setSyncStatus('error');
+        return;
+      }
+    }
+
     const updated = deleteSavedQuote(id);
     setSavedQuotes(updated);
+    setSyncStatus('connected');
     showToast('Quotation deleted.');
   };
 
   // Handler: Clear All Saved Quotes
-  const handleClearAllQuotes = () => {
+  const handleClearAllQuotes = async () => {
+    if (currentUser && currentUser.role !== 'ADMIN') {
+      showToast('Permission denied: Only administrators can clear quotations history.');
+      return;
+    }
+
+    setSyncStatus('syncing');
+    if (isSupabaseConfigured()) {
+      await clearAllQuotationsFromCloud();
+    }
+
     clearAllSavedQuotes();
     setSavedQuotes([]);
+    setSyncStatus('connected');
     showToast('Saved history cleared.');
   };
 
@@ -987,6 +1146,11 @@ export default function App() {
         logo={logo}
         savedCount={savedQuotes.length}
         customerCount={customers.length}
+        currentUser={currentUser}
+        syncStatus={syncStatus}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onSignOut={handleSignOut}
+        onOpenUserManagement={() => setIsUserManagementOpen(true)}
         onOpenItinerary={() => setIsItineraryModalOpen(true)}
         onOpenSaved={() => setIsSavedModalOpen(true)}
         onOpenCustomers={() => setIsCustomerDbModalOpen(true)}
@@ -999,14 +1163,20 @@ export default function App() {
         onDownloadPDF={handleDownloadPDF}
         onExportExcel={handleExportExcel}
         onPrint={() => setIsPrintModalOpen(true)}
-        onLogoUpload={newLogo => {
+        onLogoUpload={async newLogo => {
           setLogo(newLogo);
           saveLogo(newLogo);
+          if (isSupabaseConfigured()) {
+            await updateCompanySettings(company, newLogo, terms);
+          }
           showToast('Company logo updated and saved!');
         }}
-        onLogoRemove={() => {
+        onLogoRemove={async () => {
           setLogo(null);
           saveLogo(null);
+          if (isSupabaseConfigured()) {
+            await updateCompanySettings(company, null, terms);
+          }
           showToast('Logo removed.');
         }}
       />
@@ -1116,6 +1286,7 @@ export default function App() {
       <SavedModal
         isOpen={isSavedModalOpen}
         savedQuotes={savedQuotes}
+        currentUser={currentUser}
         onClose={() => setIsSavedModalOpen(false)}
         onLoadQuote={handleLoadSavedQuote}
         onDeleteQuote={handleDeleteSavedQuote}
@@ -1124,6 +1295,7 @@ export default function App() {
 
       <CustomerDatabaseModal
         isOpen={isCustomerDbModalOpen}
+        currentUser={currentUser}
         onClose={() => setIsCustomerDbModalOpen(false)}
         onSelectCustomer={selectedFields => {
           setCustomer(prev => ({ ...prev, ...selectedFields }));
@@ -1147,12 +1319,36 @@ export default function App() {
       <CompanyModal
         isOpen={isCompanyModalOpen}
         company={company}
+        currentUser={currentUser}
         onClose={() => setIsCompanyModalOpen(false)}
-        onSave={updatedCo => {
+        onSave={async updatedCo => {
+          if (currentUser && currentUser.role !== 'ADMIN') {
+            showToast('Permission denied: Only administrators can modify company settings.');
+            return;
+          }
           setCompany(updatedCo);
           saveCompanyDetails(updatedCo);
-          showToast('Company details saved!');
+          if (isSupabaseConfigured()) {
+            await updateCompanySettings(updatedCo, logo, terms);
+          }
+          showToast('Company details saved to database!');
         }}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={() => {
+          loadAllDataFromCloud();
+        }}
+        showToast={showToast}
+      />
+
+      <UserManagementModal
+        isOpen={isUserManagementOpen}
+        currentUser={currentUser}
+        onClose={() => setIsUserManagementOpen(false)}
+        showToast={showToast}
       />
 
       <ItineraryModal

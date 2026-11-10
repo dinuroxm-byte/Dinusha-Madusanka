@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan to enable free publishing and restore the preview link by removing the server-side AI capability flag, verifying static SPA configuration, and rebuilding the development and preview server.",
-  "updatedAt":  "2026-11-08T15:54:31.759443482Z",
+  "summary":  "Technical implementation plan to upgrade Voya Lanka Tours from localStorage to Supabase cloud database with Role-Based Access Control (ADMIN & STAFF), Row Level Security (RLS), real-time sync, and preservation of all quotation and PDF features.",
+  "updatedAt":  "2026-11-10T17:24:22.761929172Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

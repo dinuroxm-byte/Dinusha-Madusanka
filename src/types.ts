@@ -368,3 +368,16 @@ export interface DatabaseBackup {
   termsConfig: TermsConfig;
   logo: LogoData | null;
 }
+
+export type UserRole = 'ADMIN' | 'STAFF';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  createdAt?: string;
+}
+
+export type CloudSyncStatus = 'connected' | 'syncing' | 'offline' | 'error';
+

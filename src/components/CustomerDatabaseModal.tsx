@@ -17,15 +17,22 @@ import {
   Users,
   X
 } from 'lucide-react';
-import { CustomerDetails, CustomerRecord } from '../types';
+import { CustomerDetails, CustomerRecord, UserProfile } from '../types';
 import {
   deleteCustomer,
   loadCustomers,
   saveSingleCustomer
 } from '../utils/storage';
+import {
+  deleteCustomerFromCloud,
+  fetchCustomers,
+  saveCustomerToCloud
+} from '../utils/supabaseStorage';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 interface CustomerDatabaseModalProps {
   isOpen: boolean;
+  currentUser?: UserProfile | null;
   onClose: () => void;
   onSelectCustomer?: (customer: Partial<CustomerDetails>) => void;
   showToast: (msg: string) => void;
@@ -33,12 +40,14 @@ interface CustomerDatabaseModalProps {
 
 export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
   isOpen,
+  currentUser,
   onClose,
   onSelectCustomer,
   showToast
 }) => {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const isAdmin = !currentUser || currentUser.role === 'ADMIN';
 
   // Add / Edit form state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,8 +63,13 @@ export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
 
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const refreshList = () => {
-    setCustomers(loadCustomers());
+  const refreshList = async () => {
+    if (isSupabaseConfigured()) {
+      const list = await fetchCustomers();
+      setCustomers(list);
+    } else {
+      setCustomers(loadCustomers());
+    }
   };
 
   useEffect(() => {
@@ -93,7 +107,7 @@ export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
     nameInputRef.current?.focus();
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -116,6 +130,13 @@ export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
         notes: notes.trim()
       };
 
+      if (isSupabaseConfigured()) {
+        const res = await saveCustomerToCloud(updated);
+        if (!res.success) {
+          setFormError(res.message);
+          return;
+        }
+      }
       saveSingleCustomer(updated);
       showToast(`Updated profile for "${trimmedName}".`);
       resetForm();
@@ -134,6 +155,13 @@ export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
         quoteIds: []
       };
 
+      if (isSupabaseConfigured()) {
+        const res = await saveCustomerToCloud(newCust);
+        if (!res.success) {
+          setFormError(res.message);
+          return;
+        }
+      }
       saveSingleCustomer(newCust);
       showToast(`Added "${trimmedName}" to Customer Database.`);
       resetForm();
@@ -141,8 +169,16 @@ export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
     }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deletingCustomer) return;
+    if (isSupabaseConfigured()) {
+      const res = await deleteCustomerFromCloud(deletingCustomer.id);
+      if (!res.success) {
+        showToast(res.message);
+        setDeletingCustomer(null);
+        return;
+      }
+    }
     deleteCustomer(deletingCustomer.id);
     if (editingId === deletingCustomer.id) resetForm();
     showToast(`Removed "${deletingCustomer.name}" from customer records.`);
@@ -433,14 +469,16 @@ export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setDeletingCustomer(c)}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                        title="Delete customer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingCustomer(c)}
+                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                          title="Delete customer (Admin only)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
