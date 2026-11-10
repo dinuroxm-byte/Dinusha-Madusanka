@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan to enable free publishing and restore the preview link by removing the server-side AI capability flag, verifying static SPA configuration, and rebuilding the development and preview server.",
+  "updatedAt":  "2026-11-08T15:54:31.759443482Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voya Lanka Tours</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','system-ui','sans-serif']}}}}</script>
+<style>
+:root{color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{background:#0f172a}
+.f{width:100%;background:#0f172a;border:1px solid #334155;border-radius:.5rem;padding:.35rem .6rem;font-size:.8rem;color:#f1f5f9}
+.f:focus{outline:none;border-color:#0284c7}
+.l{display:block;font-size:.7rem;color:#94a3b8;margin-bottom:.2rem}
+.card{background:rgba(30,41,59,.8);border:1px solid rgba(51,65,85,.6);border-radius:1rem;padding:1.25rem}
+.btn{padding:.4rem .75rem;font-size:.75rem;font-weight:600;border-radius:.5rem;border:1px solid #334155;background:#1e293b;color:#e2e8f0}
+.btn:hover{background:#334155}
+#printArea{position:fixed;left:-10000px;top:0;width:800px;background:#fff}
+@media print{body>*:not(#printArea){display:none!important}#printArea{position:static;width:100%}}
+</style>
+</head>
+<body class="font-sans text-slate-100 min-h-screen">
+<header class="bg-slate-950 border-b border-slate-800 sticky top-0 z-40">
+ <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-2">
+  <div class="flex items-center gap-3">
+   <div id="logoIcon" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-700 to-teal-600 flex items-center justify-center"><i class="fa-solid fa-plane-departure"></i></div>
+   <img id="logoImg" class="hidden h-10 w-auto max-w-[140px] object-contain rounded-lg bg-white p-0.5" alt="Company logo">
+   <div><h1 class="text-base font-bold leading-none">Voya Lanka Tours</h1><p class="text-xs text-slate-400 mt-1">MORE THAN A DESTINATION</p></div>
+  </div>
+  <div class="flex items-center gap-2 flex-wrap justify-end">
+   <button class="btn text-sky-300" onclick="openItin()"><i class="fa-solid fa-route"></i> Itinerary</button>
+   <button class="btn text-amber-300" onclick="toggleModal()"><i class="fa-solid fa-folder-open"></i> Saved <span id="badge" class="bg-amber-500 text-slate-950 text-[10px] px-1.5 rounded-full">0</span></button>
+   <button class="btn" onclick="loadDemo()"><i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Demo</button>
+   <button class="btn" onclick="resetForm()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+   <input type="file" id="logoFile" accept="image/*" class="hidden" onchange="onLogoFile(event)">
+   <button class="btn" onclick="$('logoFile').click()"><i class="fa-solid fa-image text-sky-400"></i> Logo</button>
+   <button class="btn" onclick="openCo()"><i class="fa-solid fa-building text-sky-400"></i> Company</button>
+   <button id="logoDel" class="btn hidden text-rose-300" onclick="removeLogo()" title="Remove logo">&times;</button>
+   <button class="btn !bg-sky-700" onclick="downloadPDF()"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+   <button class="btn" onclick="exportExcel()" title="Export everything to Excel"><i class="fa-solid fa-file-excel text-emerald-400"></i> Excel</button>
+   <button class="btn" onclick="doPrint()" title="Print quotation"><i class="fa-solid fa-print"></i></button>
+  </div>
+ </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+<div class="lg:col-span-8 space-y-6">
+
+ <section class="card">
+  <div class="flex flex-col sm:flex-row justify-between gap-4 pb-4 mb-4 border-b border-slate-700">
+   <div><span class="text-xs font-bold uppercase text-sky-500">System Auto ID</span>
+    <input id="qno" readonly class="f mt-2 !w-52 font-mono font-bold text-sky-400 text-base"></div>
+   <div class="bg-slate-900 p-3 rounded-xl border border-slate-700">
+    <label class="l">USD Conversion Rate (Manual)</label>
+    <div class="flex items-center gap-2 text-xs text-slate-400">1 USD = <input type="number" id="usdRate" value="305" class="f !w-24 text-right font-bold text-amber-300" oninput="calc()"> LKR</div>
+   </div>
+  </div>
+  <h3 class="text-sm font-semibold mb-3"><i class="fa-solid fa-user-tag text-sky-500"></i> Customer &amp; Traveler Details</h3>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   <div><label class="l">Customer Full Name</label><input class="f" id="custName" placeholder="e.g. John Doe"></div>
+   <div><label class="l">Email Address</label><input class="f" id="custEmail" type="email" placeholder="john@example.com"></div>
+   <div><label class="l">Contact / WhatsApp</label><input class="f" id="custPhone" placeholder="+1 234 567 890"></div>
+   <div><label class="l">Country / Nationality</label><input class="f" id="custCountry" placeholder="e.g. United Kingdom"></div>
+   <div><label class="l">Travel Arrival Date</label><input class="f" id="travelDate" type="date"></div>
+   <div><label class="l">Special Remarks / Notes</label><input class="f" id="custNotes" placeholder="Honeymooners, Veg, etc."></div>
+  </div>
+ </section>
+
+ <section class="card">
+  <h3 class="text-sm font-semibold mb-3"><i class="fa-solid fa-users text-sky-500"></i> Pax &amp; Trip Duration</h3>
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+   <div><label class="l">Adults (12+)</label><select class="f" id="paxAdults" onchange="calc()"></select></div>
+   <div><label class="l">Children (&lt; 12)</label><select class="f" id="paxChild12" onchange="calc()"></select></div>
+   <div><label class="l">Children (&lt; 05)</label><select class="f" id="paxChild5" onchange="calc()"></select></div>
+   <div><label class="l">Days</label><input class="f font-bold" id="numDays" type="number" value="5" min="1" max="60" oninput="daysChange()"></div>
+   <div><label class="l">Nights (Days - 1)</label><div class="f !bg-slate-950 font-bold text-teal-400" id="nights">4</div></div>
+  </div>
+  <div class="mt-3 p-2.5 bg-slate-900/60 rounded-lg text-xs text-slate-400">Total Group Pax: <b id="paxTotal" class="text-amber-400"></b></div>
+ </section>
+
+ <section class="card">
+  <div class="flex justify-between items-start mb-4 gap-2">
+   <div><h3 class="text-sm font-semibold"><i class="fa-solid fa-hotel text-sky-500"></i> Accommodation &amp; Meal Cost Per Night</h3>
+   <p class="text-xs text-slate-400 mt-0.5">Use <b>Clone Room</b> on any room card to duplicate that exact configuration.</p></div>
+   <button class="btn whitespace-nowrap" onclick="allHB()">Set All Half-Board</button>
+  </div>
+  <div id="nightsBox" class="space-y-4"></div>
+ </section>
+
+ <section class="card space-y-4">
+  <h3 class="text-sm font-semibold"><i class="fa-solid fa-van-shuttle text-sky-500"></i> Transportation &amp; Vehicle Cost Engine</h3>
+  <div class="grid md:grid-cols-3 gap-3">
+   <div><label class="l">Vehicle</label><select class="f" id="vehicleType" onchange="setVehicle()">
+    <option value="Car - Sedan" data-r="12000">Car - Sedan</option>
+    <option value="7 Seater Jeep / SUV" data-r="18000">7 Seater Jeep / SUV</option>
+    <option value="Flat roof full air conditioned van" data-r="22000" selected>Flat roof full air conditioned van</option>
+    <option value="High roof full air conditioned van" data-r="26000">High roof full air conditioned van</option>
+    <option value="Full air conditioned Bus" data-r="45000">Full air conditioned Bus</option></select></div>
+   <div><label class="l">Per Day Charge (LKR)</label><input class="f text-right" id="vRate" type="number" value="22000" oninput="calc()"></div>
+   <div><label class="l">Vehicle Cost (Days x Rate)</label><div class="f !bg-slate-950 text-right font-bold" id="vTotal"></div></div>
+  </div>
+  <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-700">
+   <span class="text-xs font-semibold text-amber-400 uppercase"><i class="fa-solid fa-gas-pump"></i> Fuel Cost Formula Engine</span>
+   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 items-end">
+    <div><label class="l">Total Kilometers</label><input class="f" id="fuelKm" type="number" value="750" oninput="calc()"></div>
+    <div><label class="l">Avg Consumption (KM/L)</label><input class="f" id="fuelAvg" type="number" value="10" min="1" step="0.5" oninput="calc()"></div>
+    <div><label class="l">Fuel Price / Liter (LKR)</label><input class="f" id="fuelPrice" type="number" value="370" oninput="calc()"></div>
+    <div class="bg-slate-950 p-2 rounded-lg text-right"><span class="block text-[10px] text-slate-400">Required Fuel</span><b id="fuelL" class="text-xs text-amber-300"></b><b id="fuelC" class="block text-xs text-amber-400"></b></div>
+   </div>
+  </div>
+  <div class="grid sm:grid-cols-2 gap-3">
+   <div><label class="l">Driver Charge - Per Day (LKR)</label><input class="f" id="drvDay" type="number" value="3500" oninput="calc()"></div>
+   <div><label class="l">Driver Total (Days x Rate)</label><div class="f !bg-slate-950 text-right font-bold" id="drvTotal"></div></div>
+  </div>
+ </section>
+
+ <section class="card">
+  <h3 class="text-sm font-semibold mb-3"><i class="fa-solid fa-user-tie text-sky-500"></i> Guide Services &amp; Crew Accommodation</h3>
+  <div class="grid sm:grid-cols-2 gap-3 mb-4">
+   <div><label class="l">Guide</label><select class="f" id="guideType" onchange="setGuide()">
+    <option data-r="4500">Private English-Speaking Chauffeur Guide</option>
+    <option data-r="7500">Private German-Speaking Chauffeur Guide</option>
+    <option data-r="7500">Private Spanish-Speaking Chauffeur Guide</option>
+    <option data-r="8000">Private Chinese-Speaking Chauffeur Guide</option>
+    <option data-r="8000">Private Japanese-Speaking Chauffeur Guide</option></select></div>
+   <div><label class="l">Guide Daily Fee (LKR)</label><input class="f text-right" id="guideFee" type="number" value="4500" oninput="calc()"></div>
+  </div>
+  <div class="bg-slate-900 p-3 rounded-xl border border-slate-700">
+   <div class="flex justify-between mb-2 text-xs"><b class="text-teal-400"><i class="fa-solid fa-bed"></i> Guide or Driver Room (LKR)</b><i class="text-slate-400">Rule: calculate NIGHT COUNT, not days</i></div>
+   <div class="grid sm:grid-cols-3 gap-3 items-center">
+    <div><label class="l">Room Charge / Night</label><input class="f text-right" id="crewRoom" type="number" value="3000" oninput="calc()"></div>
+    <div class="text-xs text-slate-400">Calculation: <b id="crewCalc" class="text-slate-200"></b></div>
+    <div class="bg-slate-950 p-2 rounded-lg text-right font-bold text-teal-300 text-sm" id="crewTotal"></div>
+   </div>
+  </div>
+ </section>
+
+ <section class="card">
+  <div class="flex justify-between items-center mb-3">
+   <h3 class="text-sm font-semibold"><i class="fa-solid fa-receipt text-sky-500"></i> Toll + Parking &amp; Other Charges</h3>
+   <button class="btn !bg-sky-700" onclick="addOther()"><i class="fa-solid fa-plus"></i> Add Other Charge</button>
+  </div>
+  <div class="grid sm:grid-cols-2 gap-3 mb-3">
+   <div><label class="l">Toll + Parking (LKR)</label><input class="f text-right" id="toll" type="number" value="6000" oninput="calc()"></div>
+   <div><label class="l">Other Charges Subtotal</label><div class="f !bg-slate-950 text-right font-bold" id="otherSub"></div></div>
+   <div><label class="l">Drinking water bottles (500 ml), shown in PDF inclusions</label><input class="f text-right" id="waterQty" type="number" value="100" min="0"></div>
+  </div>
+  <div id="otherBox" class="space-y-2"></div>
+ </section>
+
+ <section class="card space-y-3">
+  <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+   <div><h3 class="text-sm font-semibold"><i class="fa-solid fa-file-contract text-sky-500"></i> Payment, Inclusions, Exclusions &amp; Terms (printed in PDF)</h3>
+   <p class="text-xs text-slate-400 mt-0.5">One item per line. Edit anytime, then press <b>Save as default</b> to keep it for future quotations. Auto-fill tags: {days} {nights} {vehicle} {hotels} {meals} {guide} {water} {validUntil} {dep} {bal} {depAmt} {balAmt}</p></div>
+   <div class="flex gap-2 shrink-0"><button class="btn" onclick="resetTC()">Reset to standard</button><button class="btn !bg-emerald-600" onclick="saveTC()"><i class="fa-solid fa-floppy-disk"></i> Save as default</button></div>
+  </div>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+   <div><label class="l">Advance / deposit (%)</label><input class="f text-right font-bold text-amber-300" id="tcDep" type="number" value="50" min="0" max="100" oninput="tcPreview()"></div>
+   <div><label class="l">Balance (%) - auto</label><div class="f !bg-slate-950 text-right font-bold" id="tcBal">50</div></div>
+   <div><label class="l">Quotation valid (days)</label><input class="f text-right" id="tcValid" type="number" value="14" min="1" oninput="tcPreview()"></div>
+   <div class="col-span-2 md:col-span-1"><label class="l">Valid until (auto)</label><div class="f !bg-slate-950 text-right" id="tcValidDate"></div></div>
+  </div>
+  <div id="tcPay" class="text-xs font-semibold text-amber-300 bg-slate-900 rounded-lg p-2.5 border border-slate-700"></div>
+  <div class="grid md:grid-cols-2 gap-3">
+   <div><label class="l">Package inclusions</label><textarea id="tcIncl" rows="7" class="f" oninput="tcPreview()"></textarea></div>
+   <div><label class="l">Package exclusions</label><textarea id="tcExcl" rows="7" class="f" oninput="tcPreview()"></textarea></div>
+  </div>
+  <div><label class="l">Terms &amp; conditions</label><textarea id="tcTerms" rows="5" class="f" oninput="tcPreview()"></textarea></div>
+  <div><label class="l">Closing thank-you message</label><input id="tcThanks" class="f" oninput="tcPreview()"></div>
+ </section>
+</div>
+
+<aside class="lg:col-span-4">
+ <div class="card !bg-slate-800 sticky top-20">
+  <div class="border-b border-slate-700 pb-3 mb-4 flex justify-between items-center">
+   <h3 class="font-bold"><i class="fa-solid fa-calculator text-sky-500"></i> Total Cost &amp; Final Pricing</h3>
+   <span class="text-[10px] uppercase text-slate-400">Live</span>
+  </div>
+  <div class="space-y-2 text-xs text-slate-300" id="sumRows"></div>
+  <div class="pt-3 mt-3 border-t border-slate-700 flex justify-between font-bold text-sm"><span>Total Cost (LKR):</span><span id="subtotal"></span></div>
+  <div class="mt-4 p-3 bg-slate-900 rounded-xl border border-slate-700">
+   <div class="flex justify-between items-center text-xs font-semibold text-amber-400">Add Markup (%)
+    <span><input id="markup" type="number" value="15" min="0" max="100" class="f !w-16 text-right font-bold text-amber-300 inline-block" oninput="calc()"> %</span></div>
+   <div class="flex justify-between text-xs text-slate-400 mt-2"><span>Markup Value:</span><b id="markupVal" class="text-amber-400"></b></div>
+  </div>
+  <div class="mt-3 p-3 bg-slate-900 rounded-xl border border-slate-700 space-y-2">
+   <div class="flex items-center justify-between text-xs font-semibold text-emerald-400"><span><i class="fa-solid fa-tag"></i> Discount</span>
+    <span class="flex gap-1"><select id="discType" class="f !w-20" onchange="calc()"><option value="pct">%</option><option value="lkr">LKR</option><option value="usd">USD</option></select>
+    <input id="discVal" type="number" min="0" value="0" class="f !w-24 text-right font-bold text-emerald-300" oninput="calc()"></span></div>
+   <div class="flex justify-between text-xs text-slate-400"><span>Price before discount:</span><b id="preDisc"></b></div>
+   <div class="flex justify-between text-xs text-slate-400"><span>Discount given:</span><b id="discAmt" class="text-emerald-400"></b></div>
+   <p class="text-[10px] text-slate-500">Choose % or a fixed amount (LKR / USD). Only one applies at a time.</p>
+  </div>
+  <div class="mt-5 space-y-3">
+   <div class="bg-gradient-to-r from-sky-900 to-slate-900 border border-sky-500/40 p-3.5 rounded-xl text-right"><span class="block text-[11px] uppercase font-bold text-sky-300">Final Price (LKR)</span><div class="text-2xl font-black" id="finLKR"></div></div>
+   <div class="bg-gradient-to-r from-slate-900 to-teal-950 border border-teal-500/40 p-3.5 rounded-xl text-right"><span class="block text-[11px] uppercase font-bold text-teal-300">Final Price (USD)</span><div class="text-2xl font-black text-teal-300" id="finUSD"></div><span class="text-[10px] text-slate-400" id="rateTxt"></span></div>
+   <div class="bg-slate-900 border border-amber-500/30 p-3 rounded-xl text-right"><span class="block text-[11px] uppercase font-bold text-amber-300">Per Person Package Cost (<span id="ppPax"></span> pax)</span><div class="text-lg font-black" id="ppLKR"></div><div class="text-sm font-bold text-teal-300" id="ppUSD"></div></div>
+  </div>
+  <div class="mt-5 space-y-2">
+   <button class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 font-bold text-xs rounded-xl" onclick="saveQuote()"><i class="fa-solid fa-floppy-disk"></i> Save Quotation Record</button>
+   <button class="w-full py-2.5 bg-sky-700 hover:bg-sky-600 font-bold text-xs rounded-xl" onclick="downloadPDF()"><i class="fa-solid fa-file-pdf"></i> Download PDF</button>
+   <button class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 font-semibold text-xs rounded-xl" onclick="doPrint()"><i class="fa-solid fa-print"></i> Print Quotation</button>
+   <button class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 font-semibold text-xs rounded-xl" onclick="exportExcel()"><i class="fa-solid fa-file-excel"></i> Export to Excel</button>
+  </div>
+ </div>
+</aside>
+</main>
+
+<div id="modal" class="fixed inset-0 bg-slate-950/80 z-50 hidden items-center justify-center">
+ <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col m-4 overflow-hidden">
+  <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950"><b>Saved Quotations Repository</b><button onclick="toggleModal()" class="text-slate-400 px-2">&times;</button></div>
+  <div class="p-4 flex gap-3 border-b border-slate-800">
+   <input id="search" class="f" placeholder="Search by ID, name, country or email..." oninput="renderSaved()">
+   <button id="clearBtn" class="btn text-rose-300" onclick="clearSaved()">Clear History</button>
+  </div>
+  <div class="flex-1 overflow-auto p-4"><table class="w-full text-xs text-left"><thead class="text-slate-400 uppercase text-[10px]"><tr><th class="p-2">ID</th><th>Saved</th><th>Customer</th><th>Duration</th><th class="text-right">LKR</th><th class="text-right">USD</th><th></th></tr></thead><tbody id="savedBody"></tbody></table></div>
+ </div>
+</div>
+<div id="coModal" class="fixed inset-0 bg-slate-950/80 z-50 hidden items-center justify-center">
+ <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg m-4 overflow-hidden">
+  <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950"><b>Travel Company Details</b><button onclick="closeCo()" class="text-slate-400 px-2">&times;</button></div>
+  <div class="p-4 space-y-3">
+   <p class="text-xs text-slate-400">Saved permanently and printed on every exported quotation PDF. Leave a field empty to hide it.</p>
+   <div><label class="l">Address</label><input class="f" id="coAddr" placeholder="Street, City, Sri Lanka"></div>
+   <div class="grid grid-cols-2 gap-3"><div><label class="l">Phone / WhatsApp</label><input class="f" id="coPhone" placeholder="+94 ..."></div>
+   <div><label class="l">Email</label><input class="f" id="coEmail" placeholder="info@..."></div></div>
+   <div class="grid grid-cols-2 gap-3"><div><label class="l">Website</label><input class="f" id="coWeb" placeholder="www...."></div>
+   <div><label class="l">Registration / SLTDA No.</label><input class="f" id="coReg" placeholder="Optional"></div></div>
+   <div class="flex justify-end gap-2 pt-2"><button class="btn" onclick="closeCo()">Cancel</button><button class="btn !bg-emerald-600" onclick="saveCo()">Save Company Details</button></div>
+  </div></div></div>
+<div id="itModal" class="fixed inset-0 bg-slate-950/80 z-50 hidden items-start justify-center overflow-y-auto">
+ <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl m-4 overflow-hidden">
+  <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 gap-2 flex-wrap">
+   <div><b><i class="fa-solid fa-route text-sky-400"></i> Tour Itinerary</b><div class="text-xs text-slate-400" id="itSub"></div></div>
+   <div class="flex gap-2 flex-wrap"><button class="btn" onclick="itFromHotels()">Refresh overnight stays</button><button class="btn !bg-emerald-600" onclick="itSave()"><i class="fa-solid fa-floppy-disk"></i> Save with quotation</button><button class="btn !bg-sky-700" onclick="exportItin()"><i class="fa-solid fa-file-pdf"></i> Export Itinerary PDF</button><button class="btn" onclick="closeItin()">Close</button></div>
+  </div>
+  <div class="p-4 space-y-4">
+   <p class="text-xs text-slate-400">Dates come from the Travel Arrival Date and number of days; overnight hotels come from the Night Accommodation cards. Write the activities for each day, one per line. The itinerary is saved together with the quotation.</p>
+   <div><label class="l">Greeting</label><textarea id="itGreet" rows="3" class="f" oninput="itin.greeting=this.value"></textarea></div>
+   <div id="itDays" class="space-y-3"></div>
+   <div><label class="l">Closing message</label><textarea id="itClose" rows="2" class="f" oninput="itin.closing=this.value"></textarea></div>
+  </div></div></div>
+<div id="vModal" class="fixed inset-0 bg-slate-950/80 z-50 hidden items-center justify-center">
+ <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md m-4 overflow-hidden">
+  <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950"><b id="vTitle">Export Room Voucher</b><button onclick="closeV()" class="text-slate-400 px-2">&times;</button></div>
+  <div class="p-4 space-y-3">
+   <div><label class="l">Room confirmed by</label><input class="f" id="vName" placeholder="Enter name" onkeydown="if(event.key==='Enter')exportVoucher()"></div>
+   <p class="text-xs text-slate-400">This name is printed on the voucher for this night&#39;s rooms.</p>
+   <div class="flex justify-end gap-2 pt-1"><button class="btn" onclick="closeV()">Cancel</button><button class="btn !bg-emerald-600" onclick="exportVoucher()"><i class="fa-solid fa-file-export"></i> Export Voucher</button></div>
+  </div></div></div>
+<div id="printArea"></div>
+
+<script>
+const HOTELS=["Heritance Kandalama - Dambulla","Cinnamon Grand - Colombo","Jetwing Lighthouse - Galle","Grand Hotel - Nuwara Eliya","Araliya Green Hills - Nuwara Eliya","Cinnamon Citadel - Kandy","Riff Hikkaduwa - Hikkaduwa","Santani Wellness - Kandy","Amangalla - Galle Fort","Anantara Peace Haven - Tangalle","Wild Coast Tented Lodge - Yala","Taj Samudra - Colombo","98 Acres Resort & Spa - Ella"];
+let others=[{name:"Sigiriya Entrance Ticket",cost:15000},{name:"Safari Jeep Rental Yala",cost:25000}];
+const KEY='ceylon_travel_saved_quotations';
+const $=id=>document.getElementById(id), N=id=>parseFloat($(id).value)||0, M=v=>'LKR '+Math.round(v).toLocaleString();
+const opts=(arr,v)=>arr.map(a=>`<option ${a===v?'selected':''}>${a}</option>`).join('');
+const CATS=["5-Star Luxury","4-Star Premium","3-Star Comfort","Boutique Villa"],MEALS=["Bed & Breakfast","Half-Board","Full Board"],
+BEDS=["Single","Double (DBL)","DBL + ExtraBed","Twin","Triple","Family Suite"],RCATS=["Standard Room","Sea View Room","Deluxe Room","Superior Room","Executive Suite"],VIEWS=["Garden View","Sea View","Mountain View","Pool View"];
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+
+function roomHTML(d,del){return `<div class="room-row bg-slate-800 p-3.5 rounded-xl border border-slate-700 space-y-3">
+ <div class="flex justify-between border-b border-slate-700/50 pb-2"><b class="text-[11px] text-amber-400"><i class="fa-solid fa-hotel"></i> Room Config Option</b>
+ <span class="flex gap-2"><button class="btn !py-0.5 !px-2 !text-[10px]" title="Move room up" onclick="moveRoom(this,-1)"><i class="fa-solid fa-arrow-up"></i></button><button class="btn !py-0.5 !px-2 !text-[10px]" title="Move room down" onclick="moveRoom(this,1)"><i class="fa-solid fa-arrow-down"></i></button><button class="btn !text-amber-300 !py-0.5 !text-[10px]" onclick="cloneRoom(this)"><i class="fa-solid fa-copy"></i> Clone Room</button>
+ ${del?`<button class="btn !text-rose-300 !py-0.5 !text-[10px]" onclick="this.closest('.room-row').remove();calc()"><i class="fa-solid fa-trash-can"></i> Delete</button>`:''}</span></div>
+ <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+  <div><label class="l">Hotel Name</label><input list="hotels" class="f hotel" value="${esc(d.hotel)}" oninput="calc()"></div>
+  <div><label class="l">Hotel Category</label><select class="f cat" onchange="calc()">${opts(CATS,d.category)}</select></div>
+  <div><label class="l">Meal Plan</label><select class="f meal" onchange="calc()">${opts(MEALS,d.meal)}</select></div>
+  <div><label class="l">Occupancy / Bed</label><select class="f bed" onchange="calc()">${opts(BEDS,d.bedType)}</select></div></div>
+ <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+  <div><label class="l">Room Category</label><select class="f rcat" onchange="calc()">${opts(RCATS,d.roomCategory)}</select></div>
+  <div><label class="l">Room View</label><select class="f view" onchange="calc()">${opts(VIEWS,d.roomView)}</select></div>
+  <div><label class="l">Room Rate / Night (LKR)</label><input type="number" class="f cost text-right font-bold text-amber-300" value="${d.cost}" oninput="calc()"></div></div></div>`}
+
+function roomData(r){return{hotel:r.querySelector('.hotel').value,category:r.querySelector('.cat').value,meal:r.querySelector('.meal').value,bedType:r.querySelector('.bed').value,roomCategory:r.querySelector('.rcat').value,roomView:r.querySelector('.view').value,cost:r.querySelector('.cost').value||0}}
+function nightsState(){return [...document.querySelectorAll('.night-card')].map(c=>[...c.querySelectorAll('.room-row')].map(roomData))}
+
+function buildNights(n,data){
+ const old=data||nightsState(),box=$('nightsBox');
+ if(n===0){box.innerHTML='<div class="p-4 bg-slate-900/50 rounded-xl text-center text-slate-400 text-xs">Day excursion selected (0 Nights). Accommodation charges bypassed.</div>';return}
+ box.innerHTML=Array.from({length:n},(_,i)=>{
+  const rooms=old[i]||[{hotel:HOTELS[i%HOTELS.length],category:"4-Star Premium",meal:"Half-Board",roomCategory:"Standard Room",roomView:"Garden View",bedType:"Double (DBL)",cost:28000}];
+  return `<div class="night-card bg-slate-900 border border-slate-700 rounded-xl p-4 space-y-3" data-night="${i+1}">
+   <div class="flex justify-between pb-2 border-b border-slate-800"><span class="flex items-center gap-2 text-xs font-bold"><span class="nbadge w-6 h-6 rounded-full bg-sky-700 flex items-center justify-center">N${i+1}</span><span class="ntitle">Night ${i+1} Accommodation</span></span>
+   <span class="flex gap-1.5"><button class="btn !px-2" title="Move this night up" onclick="moveNight(this,-1)"><i class="fa-solid fa-arrow-up"></i></button><button class="btn !px-2" title="Move this night down" onclick="moveNight(this,1)"><i class="fa-solid fa-arrow-down"></i></button>
+   <button class="btn !text-emerald-300 !text-[11px]" onclick="openVoucher(this)"><i class="fa-solid fa-file-export"></i> Export Voucher</button>
+   <button class="btn !text-sky-300 !text-[11px]" onclick="addRoom(this)"><i class="fa-solid fa-plus"></i> Add Another Room</button></span></div>
+   <div class="rooms space-y-3">${rooms.map((r,k)=>roomHTML(r,k>0)).join('')}</div></div>`}).join('');
+}
+function cloneRoom(btn){const row=btn.closest('.room-row');row.insertAdjacentHTML('afterend',roomHTML(roomData(row),true));calc();toast('Room block cloned successfully!')}
+function addRoom(n){if(n&&n.closest)n=+n.closest('.night-card').dataset.night;const c=document.querySelector(`.night-card[data-night="${n}"] .rooms`);c.insertAdjacentHTML('beforeend',roomHTML({hotel:HOTELS[(n-1)%HOTELS.length],category:"4-Star Premium",meal:"Half-Board",roomCategory:"Standard Room",roomView:"Garden View",bedType:"Double (DBL)",cost:28000},true));calc()}
+function renumberNights(){document.querySelectorAll('.night-card').forEach((c,i)=>{c.dataset.night=i+1;c.querySelector('.nbadge').textContent='N'+(i+1);c.querySelector('.ntitle').textContent='Night '+(i+1)+' Accommodation'})}
+function moveNight(btn,dir){const c=btn.closest('.night-card'),s=dir<0?c.previousElementSibling:c.nextElementSibling;if(!s||!s.classList.contains('night-card'))return;
+ dir<0?c.parentNode.insertBefore(c,s):c.parentNode.insertBefore(s,c);renumberNights();calc()}
+function moveRoom(btn,dir){const r=btn.closest('.room-row'),s=dir<0?r.previousElementSibling:r.nextElementSibling;if(!s||!s.classList.contains('room-row'))return;
+ dir<0?r.parentNode.insertBefore(r,s):r.parentNode.insertBefore(s,r);calc()}
+function allHB(){document.querySelectorAll('.meal').forEach(s=>s.value='Half-Board');calc()}
+function setVehicle(){const o=$('vehicleType').selectedOptions[0];$('vRate').value=o.dataset.r;calc()}
+function setGuide(){$('guideFee').value=$('guideType').selectedOptions[0].dataset.r;calc()}
+function daysChange(){let d=parseInt($('numDays').value);if(isNaN(d)||d<1)d=1;buildNights(d-1);calc()}
+
+function renderOthers(){$('otherBox').innerHTML=others.map((o,i)=>`<div class="flex items-center gap-2 bg-slate-900 p-2 rounded-lg border border-slate-700">
+ <input class="f flex-1" value="${esc(o.name)}" placeholder="Item description" oninput="others[${i}].name=this.value;calc()">
+ <span class="text-xs text-slate-400">LKR</span><input type="number" class="f !w-28 text-right font-semibold" value="${o.cost}" oninput="others[${i}].cost=parseFloat(this.value)||0;calc()">
+ <button class="text-rose-400 px-1.5" onclick="others=others.filter((_,k)=>k!==${i});renderOthers();calc()">&times;</button></div>`).join('')}
+function addOther(){others.push({name:"Activity / Entrance Fee",cost:5000});renderOthers();calc()}
+
+let T={},lastUsd=0,LC={};
+function calc(){
+ const a=+$('paxAdults').value||0,c12=+$('paxChild12').value||0,c5=+$('paxChild5').value||0;
+ $('paxTotal').textContent=`${a+c12+c5} Pax (${a} Adults, ${c12} Child <12, ${c5} Child <5)`;
+ const days=parseInt($('numDays').value)||1,nights=Math.max(0,days-1);$('nights').textContent=nights;
+ const rate=N('usdRate')||305;$('rateTxt').textContent=`1 USD = ${rate.toLocaleString()} LKR`;
+ let accom=0;document.querySelectorAll('.cost').forEach(i=>accom+=parseFloat(i.value)||0);
+ const veh=days*N('vRate');$('vTotal').textContent=M(veh);
+ const lit=N('fuelAvg')>0?N('fuelKm')/N('fuelAvg'):0,fuel=lit*N('fuelPrice');
+ $('fuelL').textContent=lit.toFixed(1)+' L';$('fuelC').textContent=M(fuel);
+ const drv=days*N('drvDay');$('drvTotal').textContent=M(drv);
+ const guide=days*N('guideFee'),crew=nights*N('crewRoom');
+ $('crewCalc').textContent=`${nights} Nights x LKR ${N('crewRoom').toLocaleString()}`;$('crewTotal').textContent=M(crew);
+ const toll=N('toll');let oth=0;others.forEach(o=>oth+=o.cost||0);$('otherSub').textContent=M(oth);
+ const sub=accom+veh+fuel+drv+guide+crew+toll+oth,mk=sub*N('markup')/100,pre=sub+mk,dv=N('discVal'),dt=$('discType').value,dAmt=Math.min(pre,Math.max(0,dt==='pct'?pre*Math.min(dv,100)/100:dt==='usd'?dv*rate:dv)),fin=pre-dAmt,usd=fin/rate,pax=Math.max(1,a+c12+c5);
+ const rows=[["Accommodation & Meals Total",accom],["Vehicle Cost",veh],["Fuel Cost",fuel],["Driver Charge",drv],["Guide Daily Fee Total",guide],["Guide or Driver Room (LKR)",crew],["Toll + Parking Charges",toll],["Other Charges",oth]];
+ $('sumRows').innerHTML=rows.map(r=>`<div class="flex justify-between"><span>${r[0]}:</span><b class="text-slate-100">${M(r[1])}</b></div>`).join('');
+ $('subtotal').textContent=M(sub);$('markupVal').textContent=M(mk);$('finLKR').textContent=M(fin);$('preDisc').textContent=M(pre);$('discAmt').textContent=(dAmt>0?'- ':'')+M(dAmt);$('ppPax').textContent=pax;$('ppLKR').textContent=M(fin/pax);$('ppUSD').textContent=fU(usd/pax);LC={sub,mk,pre,dAmt,dt,dv,fin,usd,pax,rate,accom,veh,fuel,drv,guide,crew,toll,oth};
+ lastUsd=usd;tcPreview();$('finUSD').textContent='$ '+usd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function printable(){
+ calc();const g=id=>$(id).value||'';
+ let rows='';document.querySelectorAll('.night-card').forEach(card=>card.querySelectorAll('.room-row').forEach(r=>{const d=roomData(r);
+  rows+=`<tr><td style="padding:8px;border:1px solid #cbd5e1;font-weight:bold">Night ${card.dataset.night}</td><td style="padding:8px;border:1px solid #cbd5e1"><b>${esc(d.hotel)}</b><br><small style="color:#64748b">${d.category}</small></td><td style="padding:8px;border:1px solid #cbd5e1">${d.roomCategory}<br><small style="color:#64748b">${d.roomView}</small></td><td style="padding:8px;border:1px solid #cbd5e1">${d.bedType}</td><td style="padding:8px;border:1px solid #cbd5e1">${d.meal}</td></tr>`}));
+ const oc=others.map(o=>`<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px"><span>• ${esc(o.name)}</span><span>${M(o.cost||0)}</span></div>`).join('');
+ return `<div style="font-family:Arial,sans-serif;color:#0f172a;padding:20px;background:#fff">
+ <div style="display:flex;justify-content:space-between;border-bottom:2px solid #0284c7;padding-bottom:12px;margin-bottom:16px"><div>${logo&&logo.data?`<img src="${logo.data}" style="height:44px;margin-bottom:6px"><br>`:''}<h1 style="margin:0;font-size:22px">VOYA LANKA TOURS</h1><p style="margin:4px 0 0;font-size:11px;color:#64748b">Tour Itinerary &amp; Inventory Confirmation Voucher</p></div>
+ <div style="text-align:right"><b style="color:#0284c7">${g('qno')}</b><div style="font-size:10px;color:#64748b">Date: ${new Date().toISOString().split('T')[0]}</div></div></div>
+ <div style="text-align:center;font-size:18px;font-weight:bold;margin:0 0 14px">QUOTATION</div>
+ <table style="width:100%;font-size:11px;background:#f8fafc;margin-bottom:16px"><tr><td style="padding:10px;width:50%;vertical-align:top"><b style="color:#0284c7">CUSTOMER DETAILS:</b><br>Name: ${esc(g('custName')||'Valued Guest')}<br>Email: ${esc(g('custEmail')||'N/A')}<br>Phone: ${esc(g('custPhone')||'N/A')}<br>Country: ${esc(g('custCountry')||'N/A')}</td>
+ <td style="padding:10px;vertical-align:top"><b style="color:#0284c7">TOUR DETAILS:</b><br>Duration: ${g('numDays')} Days / ${$('nights').textContent} Nights<br>Pax: ${g('paxAdults')} Adults, ${g('paxChild12')} Children (&lt;12), ${g('paxChild5')} Children (&lt;5)<br>Arrival: ${g('travelDate')||'Flexible'}<br>Notes: ${esc(g('custNotes')||'None')}</td></tr></table>
+ <h3 style="font-size:12px;color:#0284c7;border-bottom:1px solid #cbd5e1;padding-bottom:4px">ACCOMMODATION &amp; MEAL SCHEDULE</h3>
+ <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px"><thead><tr style="background:#f1f5f9"><th style="padding:8px;border:1px solid #cbd5e1;text-align:left">Night</th><th style="padding:8px;border:1px solid #cbd5e1;text-align:left">Hotel</th><th style="padding:8px;border:1px solid #cbd5e1;text-align:left">Room &amp; View</th><th style="padding:8px;border:1px solid #cbd5e1;text-align:left">Bed</th><th style="padding:8px;border:1px solid #cbd5e1;text-align:left">Meal</th></tr></thead><tbody>${rows}</tbody></table>
+ <h3 style="font-size:12px;color:#0284c7;border-bottom:1px solid #cbd5e1;padding-bottom:4px">TRANSPORT &amp; SERVICE INCLUSIONS</h3>
+ <div style="font-size:11px;border:1px solid #e2e8f0;padding:10px;margin-bottom:16px"><div>• <b>Vehicle:</b> Private ${g('vehicleType')} for ${g('numDays')} Days</div><div>• <b>Chauffeur / Guide:</b> ${g('guideType')}</div><div>• <b>Fuel:</b> Complete fuel charges covered</div><div>• <b>Tolls &amp; Parking:</b> Included</div>${oc}</div>
+ <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;padding:12px;border-top:2px solid #0f172a"><span style="font-size:10px;color:#64748b">Manual Exchange Rate: 1 USD = ${g('usdRate')} LKR</span>
+ <div style="text-align:right"><div style="font-size:11px;font-weight:bold;color:#64748b">TOTAL PACKAGE PRICE</div><div style="font-size:18px;font-weight:800">${$('finLKR').textContent}</div><div style="font-size:16px;font-weight:800;color:#0284c7">${$('finUSD').textContent}</div></div></div>
+ <div style="margin-top:20px;text-align:center;font-size:9px;color:#94a3b8">${[company.address,company.phone,company.email,company.website,company.reg].filter(Boolean).join(' | ')}<br>Voya Lanka Tours • Rates valid for 14 days from date of issue</div></div>`}
+async function downloadPDF(){const p=$('printArea');p.innerHTML=printable();
+ const nm=($('custName').value||'').trim().replace(/[^\w\- ]+/g,'').replace(/\s+/g,'-');
+ const fname='Quotation-'+($('qno').value||'Draft')+(nm?'-'+nm:'')+'.pdf';
+ let dl=null;try{dl=await claude.use('downloads')}catch(e){}
+ if(!dl){toast('Direct download unavailable here, opening print dialog...');return doPrint()}
+ toast('Generating quotation PDF...');
+ try{const blob=makePDF();
+  await dl.save({filename:fname,data:blob});toast('Quotation PDF saved: '+fname)}
+ catch(e){if(e&&e.code==='declined')return;toast('Could not save PDF, opening print dialog...');doPrint()}}
+const OSB='AAEAAAAPAIAAAwBwR0RFRgCNAIAAACXwAAAAHEdQT1NEdkx1AAAmDAAAACBHU1VC7bDyoAAAJiwAAAA8T1MvMnKrY+YAACMMAAAAYFNUQVRe+UGhAAAmaAAAAFpjbWFwAAwA0QAAI2wAAAA0Z2FzcAAVACMAACXgAAAAEGdseWYq4/EOAAAA/AAAH05oZWFkIAPqkQAAITAAAAA2aGhlYQ4pBYQAACLoAAAAJGhtdHisWyKSAAAhaAAAAYBsb2Nhd5VwOwAAIGwAAADCbWF4cAB/APIAACBMAAAAIG5hbWU2XVfKAAAjoAAAAiBwb3N0/58AMgAAJcAAAAAgAAIAdf/lAdMFtgADAA8AAEEjAyEBNDYzMhYVFAYjIiYBoPQzAVr+omdJR2dnR0lnAeUD0frZXkxMXlpQUAAAAgCFA6YDQgW2AAMABwAAQQMjAyEDIwMBnCnFKQK9KcUpBbb98AIQ/fACEAACAC0AAAT+BbQAGwAfAABBByEVIQMjEyMDIxMjNSE3IzUhEzMDMxMzAzMVBTM3IwPnLwEC/tdN3E7CTNdK7gEVL/wBIU3bTcZO107w/R3EL8QDTOjO/moBlv5qAZbO6NEBl/5pAZf+adHo6AADAFj/iQREBhIAJAAsADUAAEU1JiYnERYWFxEuAjU0NjY3NTMVFhYXByYmJxEeAhUUBgcVETY2NTQmJicDNQ4CFRQWFgIGhdFWVexrnr1TbcJ/iXTJYV5SpUlvyH7Z3EZCHj0tiSk6Hhs5d8kDLSYBCClDBwE2PnWPZGaVWguZlQQtK+oiJgb+2SlglHiVyhTNAbsMOy8cLCcUAVnrBhsqHR0sJgAABQA//+4G9gXLAAsAFwAbACcAMwAAQTIWFRQGIyImNTQ2FyIGFRQWMzI2NTQmJQEjARMyFhUUBiMiJjU0NhciBhUUFjMyNjU0JgGYrLKotqmwpbYxLi4xMS8vA9v81fADK+Kssqi2qbCltjEuLjExLy8Fy/DZ2fT02dnw0Xx+fn59f358vPpKBbb9zfDZ2PT02Nnw0Xx+fn59f358AAADAFL/7AYABcsAJQAwADwAAEEyFhYVFAYHATY2NyEGAgcBIScOAiMiJiY1NDY2Ny4CNTQ2NhMOAhUUFjMyNjcDIgYVFBYXNjY1NCYCe3a4a6d9ARwqOxYBPh93XAEt/odzO4eZVabufkB4VDU/G23BEyY5HoRiQnIv4zNdNCtWXFMFy0qOZo3ASP7rRZpOc/77c/7bcSk8IGi7fGiVcTA+bGs7aJdT/KgdPkYqWGQgHQO2NEcyXzEvXz09NQAAAQCFA6YBnAW2AAMAAEEDIwMBnCnFKQW2/fACEAAAAQBS/rwCeQW2ABAAAFM0EhI3MwYCFRQSEhcjJgICUkCGZ/qMkUB/XPhnhkACMacBPwEjfMD+MPOe/sf+3n54AR0BOwABAD3+vAJkBbYAEQAAQRQCAgcjNhISNTQCAiczFhISAmRAhWj4XX5AQX5e+miFQAIxpf7F/uN4fgEiATmeogE8ASWAfP7d/sEAAAEAPwJWBB0GFAAOAABBAyUXBRMHAwMnEyU3BQMCsCkBdSH+rN/jnIns3f6uJwFtKQYU/pBo/Bj+13kBOf7JdwEpGvpoAXAAAAEAWADjBDkExQALAABBIRUhESMRITUhETMCtgGD/n3b/n0Bg9sDP9v+fwGB2wGGAAEAP/74AcsA7gAKAABlFw4CByM+AjcBvA8SOUMi3BQmIQruF0impktRsqxHAAABAD0BqAJWAqIAAwAAUzUhFT0CGQGo+voAAAEAdf/lAdMBOQALAAB3NDYzMhYVFAYjIiZ1Z0lHZ2dHSWePXkxMXlpQUAAAAQAOAAADRAW2AAMAAEEBIQEDRP3f/usCIQW2+koFtgACAEr/7ARIBc0AEAAgAABBFAIGBiMiJgI1NBI2MzIWEgUUFhYzMjY2NTQmJiMiBgYESDd5xIyw4mxj4Luv4279NSVYTk1ZJiZZTU5YJQLbsf7qwmazAVHr7QFRtLP+r+6n33Bv36in4HFx4AABAHkAAANOBbYADQAAYSERNDY2NwYGBwcnATMDTv7LAgQCC0MdqJUB1/4DTiNnbSwNPxmHugF3AAEATgAABFAFywAdAABhITUBPgI1NCYjIgYHJz4CMzIWFhUUBgYHBxUhBFD8AgFvb4c9YVFVoFeoP427g5DPcGC3gbwCfdcBc3KZfkhXV05IxzZgO2izcXnIxHexDgABAE7/7ARCBcsALgAAQRQGBgcVFhYVFAYEIyImJxEWFjMyNjU0JiYjIzUzMjY2NTQmIyIGBgcnNjYzMgQEF1SPWbC3ff78zXnRXF7OWaaFPpmJb3GHjTNgcEZzXCOPVueg4gEIBG9llF4WBhaskIDKdCcoAQcwMXNoPVQs7TNZOU5YIzEX1T5StgACACMAAARxBbYACgAWAABBIxEhESE1ASERMyE1ND4CNyMGBgcBBHGw/tL9kAKBAR2w/iIDBAUBCBMqHP70AS/+0QEv1wOw/Gn4I2BgSw8pTSr+awABAGT/7AQ1BbYAIQAAQTIWFhUUBgQjIiYnERYWMzI2NjU0JiMiBgcnEyERIQM2NgJmhtF4g/79wXPLTEzVXlx+QZCVOXspezcDGf32GyJQA6ZmxpGe5XonKAELKDcxZ1BrchYLQgLp/vr+4QcOAAIASP/sBFAFxwAiADEAAFM0PgIkMzIWFxUmJiMiBgYHMz4CMzIWFhUUBgYjIi4CBTI2NTQmIyIGBhUUHgJIJVymAQC2K3MmKFsttsdRBw0cVXpSgLxmet+ZcMKSUgIQW3JjZERnOBw4UwJtfvfbqWEHCPcJC3TNiDFMLW3OlJ7keU2e8eV8hGt7PV0xM2RSMgAAAQA3AAAEUAW2AAYAAHMBIREhFQHjAiX9LwQZ/dcEsgEEwvsMAAADAEj/7ARKBckAHwAuADwAAEEyFhYVFAYGBx4CFRQGBiMiJiY1NDY2Ny4CNTQ2NgMUFjMyNjU0JiYnJw4CEyIGFRQWFhc+AjU0JgJKftWARXZLToxZguaYpOZ4S4BNQWs/g9ZocW9zckFiMhtAXzbiTGQxUTAuUDJlBclOnXZYhGMlKW2SYXqzYl6vemSUayYpaIZXdJxP+7xPZ2NROFRDHQ4dSFoDKU5HMks4GBY2TDVHTgACAEL/7ARKBccAIgAxAABBFA4CBCMiJic1FhYzMjY2NyMOAiMiJiY1NDY2MzIeAiUiBhUUFjMyNjY1NC4CBEolXKb/ALYrdCYoWi63x1EGDB1Pel59uWV54JhwwpNS/e9acmJkRWY5HDhTA0Z++NupYAcH+AoLdM6HME0tbc+Tn+N6TZ7y5XyEanw9XTEzZFIyAAIAdf/lAdMEcwALABcAAHc0NjMyFhUUBiMiJhE0NjMyFhUUBiMiJnVnSUdnZ0dJZ2dJR2dnR0lnj15MTF5aUFADlF5MTF5bT08AAgA//vgB0wRzAAoAFgAAZRcOAgcjPgI3AzQ2MzIWFRQGIyImAbwPEjlDItwUJiEKL2dJR2dnR0ln7hdIpqZLUbKsRwLbXkxMXltPTwAAAQBYAMsEOQUAAAYAAGUBNQEVAQEEOfwfA+H9VAKsywG2jwHw8P7D/ucAAgBYAaIEOQQAAAMABwAAUzUhFQE1IRVYA+H8HwPhAyfZ2f5729sAAAEAWADLBDkFAAAGAABTAQE1ARUBWAKs/VQD4fwfAboBGQE98P4Qj/5KAAIABv/lA6AFywAfACsAAEE1NDY2Nz4CNTQmIyIGByc2NjMyFhUUBgYHDgIVFQE0NjMyFhUUBiMiJgEUJlRFPksjYFZWqVdtZOqL1us1a1A8QBf+12dJR2dnR0lnAeVKRGlfMixGRSxBRDYs2zhFzZ5Ue2k6LDw7Kjz+ql5MTF5aUFAAAAIAZv9UBscFtgBBAE8AAEEUDgIjIiYnIwYGIyImNTQ2NjMyFhcDBgYVFBYzMjY2NTQmJiMiDgIVFBIEMzIkNxUGBiMiJAI1NBI2JDMyBBIBFBYzMjY3NyYmIyIGBgbHLVyLX0tzFxAqiGG3xnbalGHNOhQCAS8dLj4gi/GZofanVYQBAbp3AQFrYvKH/v6Yv3vmAUXJ2wFVwvwAXU9nVAcNFzoiYXQzAt1fuZVZSDkzTtuyitN4IxT+XBUqBlU3XJpcq/F/Zrj6lLj/AIQ1KMEpMbQBU+26AT/vhrH+uv6hcGOWed0FBVWFAAIAAAAABYUFvAAHABIAAGEDIQMhASEBAQMuAicOAgcDBDdq/etq/rICBAF7Agb9/moKISEKCiMgB2kBXP6kBbz6RAJgAVQia28pKXlsF/6sAAADALgAAAT0BbYAEgAbACUAAFMhIAQVFAYGBxUeAhUUBgYjIQEzMjY1NCYjIxERMzI2NTQmJiO4AccBJAEsNWRISXZHgvGm/d0BNrSHaHuFo8qMbjBxYwW2pM5ThlYNCg9Ji3OFvmUDc1VTVEn9xf6DbFs2Ui4AAQB3/+wE0QXLAB8AAEEiDgIVFBYWMzI2NxEGBiMiJAI1NBI2JDMyFhcHJiYDJVmJXTBNooBZs2lhvHXi/t2MWq4BAKZt22RkUqYEyUWCuHOb23MoJf78KCO7AVHhpgEUym43MPwnOgACALgAAAV1BbYACgAUAABBFAIEIyERITIEEgU0JiYjIxEzMjYFdb3+mvz+YgHL5gFSuv6+X7mIpYXj3QLp9/61pwW2o/7B86LRZPxI8gABALgAAAQCBbYACwAAYSERIRUhESEVIREhBAL8tgNK/ewB7/4RAhQFtv7+v/7+hwABALgAAAP+BbYACQAAYSERIRUhESEVIQHp/s8DRv3rAfD+EAW2/v6H/QABAHf/7AUnBcsAIQAAQSERBgYjIiQCNTQSJDMyFhcHJiYjIgYGFRQWFjMyNjcRIQLjAkRz+J3a/tCesQFV9nTiXGdDrF6Hx21OqIdCWyj+6wM1/QomLawBUPXmAVC4Mij4Ii5835eP3X0NBwExAAEAuAAABWYFtgALAABhIREhESERIREhESEFZv7L/b3+ygE2AkMBNQJ3/YkFtv3DAj0AAQC4AAAB7gW2AAMAAHMRIRG4ATYFtvpKAAAB/2j+UgHuBbYAEQAAUyImJxEWFjMyNjY1ESERFAYGHzxbICBJKTZWMgE2ddH+Ug0JAQIHDSlyawVa+qi852kAAQC4AAAFUAW2AA4AAGEhAQcRIREhETY2NwEhAQVQ/qD+gYP+ygE2HzwfAYwBWP4CAmhe/fYFtv1jK1YrAfH9eQAAAQC4AAAEPwW2AAUAAHMRIREhEbgBNgJRBbb7Sv8AAAABALgAAAbTBbYAFwAAYQEjHgIVESERIQEzASERIRE0NjY3IwEDI/6gCQIJCP7rAaYBWgYBbwGm/t8FCAIJ/ocEeymlukv9WAW2+6IEXvpKArRFtKMp+4cAAQC4AAAFyQW2ABMAAGEhASMeAhcRIREhATMuAicRIQXJ/nb9hAkEBgYD/usBhwJ7BwIGBQIBFwRSRYyLRv1QBbb7uUSGhkMCtAACAHf/7AXnBc0AEQAgAABBFAIGBCMiJCYCNTQSJDMyBBIFFBYWMzI2NjU0AiMiBgYF51Sr/vqzs/76q1SVATbv7gEzlfvVTaSChKRLrMWDpU0C3an+68hra8gBFqrjAVG6uv6u5Jndd3fdmeYBCHfdAAACALgAAASqBbYADAAWAABBIAQVFA4CIyMRIREFIxEzMjY2NTQmAosBGwEEOoPaoIX+ygHDjWZXgEZ4Bbbz1WCviE/9+AW2/v5OLmJNbGkAAAIAd/6kBecFzQAWACUAAEEUAgYHASEBIiIjIiQmAjU0EiQzMgQSBRQWFjMyNjY1NAIjIgYGBedNoHsBYP5z/vQHCgaz/vqrVJUBNu/uATOV+9VNpIKEpEusxYOlTQLdo/7xxjj+dwFIa8gBFqrjAVG6uv6u5Jndd3fdmeYBCHfdAAACALgAAAVIBbYADwAYAABBMgQWFRQGBgcBIQEjESERBSMRMzI2NTQmAmLHAQN+THxIAa7+qP6jpf7KAZReZJqFjwW2YMKUZJZoIf2DAjH9zwW2/v51Z2RoWAABAF7/7AQXBcsALwAAQRQGBiMiJiYnERYWMzI2NjU0JiYnLgM1NDY2MzIWFwcmJiMiBgYVFBYWFx4CBBd+8axMkYU8aOBuTF0qSoFRM3hsRXjfmHLPcWRloFM6Uio9e1xwn1YBloLAaBQnHQEgLkooRi03TkQnGEVkj2SDumM1MvEpLSVDLDRHQiw1c5sAAQApAAAEeQW2AAcAAGEhESERIREhAuz+yv5zBFD+cwS0AQL+/gABAK7/7AVeBbYAEwAAQREUBgQjIAA1ESERFBYzMjY2NREFXoX+88z+3v7QATWUkWZ/PAW2/E6X844BKPQDrvyBtZJGknEDfQABAAAAAAUzBbYADgAAQQEhASEBHgIXPgI3AQUz/g/+rv4QATkBEwcgIQYGHx8HARUFtvpKBbb8mhZ5hywshnkXA2YAAAEAAAAAB7wFtgApAABBASEDLgMnDgMHAyEBIRMeAxc+AzcTIRMeAxc+AjcTB7z+jP6fxgYUFhEDAxEVFAbF/qD+iwExuwgVFREEBRATFAjVASXVBxMUEQQHGR0LugW2+koDABZaa18cHF5qXBj9AgW2/OIkZG1lJSZlaVocAzP8zRtbamUlMo+OMAMeAAABAAAAAAVWBbYACwAAYSEBASEBASEBASEBBVb+nv6s/qz+tAHl/joBVgE7ATUBTv41Ain91wLyAsT98gIO/SsAAQAAAAAE/gW2AAgAAEEBIQERIREBIQJ/ATEBTv4b/sz+GwFQA1wCWvyD/ccCLwOHAAABADEAAARxBbYACQAAYSE1ASERIRUBIQRx+8ACvf1WBBr9RALPyQPtAQDI/BIAAQCP/rwCcwW2AAcAAEEhESEVIxEzAnP+HAHk4OD+vAb60/qsAAABAAwAAANCBbYAAwAAQQEhAQEhAiH+6/3fBbb6SgW2AAEAM/68AhcFtgAHAABXMxEjNSERITPf3wHk/hxxBVTT+QYAAAEALwIIBGQFvgAGAABTATMBIwEBLwG2kAHv7/6+/ugCCAO2/EoCg/19AAH//P68A07/SAADAABBITUhA078rgNS/ryMAAABAFIE2QKTBiEADAAAQR4CFxUjLgMnNQGoHlVYIMonaG1eHQYhLnBpJhsbUVlSHBUAAAIAVv/sBDsEdQAdACgAAEEyFhURIycjDgIjIiYmNTQ2Nzc1NCYjIgYHJzY2AQcGBhUUFjMyNjUCauHw1TsIMGSCXWOdWvr6wlxSUZxOZVndARh2lHNSQmKHBHXEyP0XmDxMJEydebKpCQYxWFIuI84vNv2RBARiUEY7dGsAAAIAoP/sBLQGFAAWACQAAEERFAYHMzY2MzISERQCBiMiJicjByMRASIGBgcVFBYzMjY1NCYB0QcFDCyYebzqbMKAe44sFTPpAgxQXisCYH9eb3AGFP6WP3wiRWH+2v7kv/79g1g3ewYU/WtChGUho62upKSmAAABAFz/7APdBHMAHQAARSImJjU0EjYzMhYXByYmIyIGBhUUFhYzMjY3EQYGAmam6nqL96N0qT9aSHw+UGo0OGpMX5RGRpkUef7GzQEDei0f7B0lS5Zxb5JHMy7++ywnAAACAFz/7ARxBhQAFwAkAABFIgIREBIzMhYWFzMmJjURIREjJyMOAjcyNjc1NCYjIgYVFBYCArvr7sBQelkfCgYRATLqOw0dV3gafWcDZIhlcnMUASUBHAEfAScsSi4gfUIBZvnskS5LLPOVliGjra6kpKYAAAIAXP/sBGIEcwAXAB8AAEEyFhYVFSEWFjMyNjcVBgYjIiQmNTQSNhciBgchLgICbZvgev0vBZGBa7JeU7WBqP79k4XuoFl1CQGsAS9dBHN34qOUgZMsLOwpJnz+wcQBBYPZcnpEaj4AAQApAAADdQYfABgAAEEhESERIzU3NTQ2NjMyFhcHJiYjIgYVFSEDCv74/s+oqGGxeVmSLk4jUjVAOwEIA3n8hwN5k1JSj59BHRLgCxJNPEYAAAMABv4UBG0EcwAvAD8ASwAAQSImNTQ2NyYmNTQ2NyYmNTQ2NjMyFhYXIRUHFhYVFAYjJicGBhUUFhYzMzIWFRQEJTI2NjU0JiYjIyIGBhUUFhMyNjU0JiMiBhUUFgHn6vd+ei9GSkZYZ2vNkx9SRQwBhq8YGPvfNS8XGCVLOL64wf65/tttnVQxY02eOFk0eZ5WUFNTVFRT/hSjk2WIHRRbM0BVKSaocnqrWggKA5stJVQvtMkDBRIoFhYdD56ZxNjHKUs0KjEUJEErP0gDUGpbZWVlZVtqAAEAoAAABKgGFAAaAABBERQGBzM+AjMyFhYVESERNCYjIgYGFREhEQHRCwMQJGN4RXm0ZP7PWFxcaiz+zwYU/sNTlh86SCJVtZD9JwKNeHpVpXf98gYUAAACAJMAAAHfBhQAAwAPAABBESEREzIWFRQGIyImNTQ2AdH+z5lEYmJERWFhBF77ogReAbY/VlVBQVVWPwAC/33+FAHfBhQAEAAcAABTIiYnNRYWMzI2NREhERQGBgM0NjMyFhUUBiMiJkY0cCUlQSk+VgExTq5CYUVEYmJERWH+FA8K8AoJRWUEqvspZqlkB2tWPz9WVUFBAAEAoAAABPYGFAASAABBERQGBzM2NjcBIQEBIQEHESERAdEKBgQfQSUBOQFY/kQB1/6g/r6D/s8GFP1IP34/LFYoAVT+G/2HAcVp/qQGFAAAAQCgAAAB0QYUAAMAAGEhESEB0f7PATEGFAABAKAAAAdCBHMAJwAAQTIWFREhETQmIyIGFREhETQmJiMiBgYVESERMxczPgIzMhYXMzY2BcG+w/7OUlZ5Zv7PJEo6VWEp/s/pKREiZ3xAe6suGzK3BHPD1/0nAo14eq2h/c8CjVBsNlWld/3yBF6POkgiUFRWTgABAKAAAASoBHMAFQAAQTIWFREhETQmIyIGFREhETMXMz4CAxuz2v7PV12MZv7P6SkRJGuDBHPD1/0nAo14er6z/fIEXo86SCIAAAIAXP/sBJgEcwARACAAAEEUDgIjIi4CNTQSNjMyFhIFFBYWMzI2NjU0JiYjIgYEmEuPyX52xZFPhPSpnfOL/PswZlJRZS8vZlJ5bQIxjNiVTEyV2Iy6AQKGhv7+um6WTEyWbm+TSqYAAgCg/hQEtARzABgAKAAAQTISERQCBiMiJiYnIxYWFREhETMXMz4CByIGBgcVFBYWMzI2NjU0JgMOveluwn5RdFIeEAgI/s/4Kw4eVnkSUF4rAilhVUZaLWYEc/7a/uS+/v2EKUElKFQo/j0GSpEtTC30QoRlIWyWTk6XbaSmAAACAFz+FARxBHMAFgAkAABBETQ2NyMGBiMiAhE0EjYzMhYXMzchEQEyNjY3NTQmIyIGFRQWAz8HBg0rl3u96WzBf3uZMAgbAQL9/lRjLAJkhm1qbP4UAdUqVSlFYAElARy/AQOEX0WP+bYCx0KFZCWjra6kp6cAAQCgAAADdwRzABUAAEEyFhcDJiYjIg4CFREhETMXMz4CAxAXPRMXDzcUO29YM/7P5y0PIWN/BHMFBP7iBQUeQ21P/ccEXrw5XzkAAAEAXP/sA6wEcwAqAABBFAYGIyImJzUWFjMyNjU0JiYnLgI1NDYzMhYXByYmIyIGFRQWFhceAgOsa9SedadVW9FPWU0fZm1ph0Hxymi9ZFxTk0xDRCNlYl+MTAFMcp1RHiP8KTU1KxwtOS4sWntfm50qLtwkLiQlGyozKCdVfQAAAQAv/+wDNwVMABgAAGUyNjcVBgYjIiYmNREjNTc3MxUhFSERFBYCdzJfLzGRVmSfW5KoWMMBOf7HSd8UD+MWHUGhkAIbgWbs7uX95UA/AAABAJr/7ASiBF4AFwAAQREjJyMOAiMiJiY1ESERFBYzMjY2NREEouopECRsgkZ4smMBMVZeXWorBF77oo85SCJVtJAC2f1zeHpVpXcCDgABAAAAAASNBF4ADQAAYQEhExYWFzM2NjcTIQEBqv5WAT/YEhUECAMXE9cBP/5WBF79gzh8MTV4OAJ9+6IAAAEAFAAABsUEXgAqAABhAy4DJyMOAwcDIQEhEx4CFzM+AzcTIRMeAhczPgI3EyEBBDdWByAlHwcJBx4lIAha/rj+wgEwgQ0YEwUIAg0RDwSKAVCDBxcSAQgEFBsOhgEr/r4BhyOJnYYfH4aeiyT+fQRe/hE0j4UnHWBnUw8CGP3oHX6FJiKGkzQB7/uiAAABAAoAAASWBF4ACwAAQQEhExMhAQEhAwMhAYX+mAFa2dsBWv6UAX3+pevs/qYCOwIj/pwBZP3d/cUBf/6BAAEAAP4UBI0EXgAdAABRIRMeAhczNjY3EyEBDgIjIiYnNRYWMzI2Njc3AU7TCg4KAwYGFRDPAUf+JyuKs2s0TBsVQCNAXD4SEgRe/YsePkIkNl4uAnX7E3SbTgsG8gUINls2NwABADcAAAOqBF4ACQAAYSE1ASE1IRUBIQOq/I0CBv4ZA0L+CAIKtALB6cb9UQAAAQAf/rwC1QW2ACUAAEEiJiY1ETQmJiM1MjY2NRE0NjYzFQ4CFREUBgcVFhYVERQWFhcC1a++STtyU1NyO0m+rzVPKnhycngqTzX+vDl8YgE7QU4k7yNPQAE+Yns54QEXPDn+1V5vEQwQb17+1Tk9FgEAAQHH/i8CogYOAAMAAEEzESMBx9vbBg74IQABAFL+vAMIBbYAJQAAUzU+AjURNDY3NSYmNRE0JiYnNTIWFhURFBYWMxUiBgYVERQGBlI1Tit4cXF4K041r75JO3JTU3I7Sb7+vOIBFj05AStebxAMEW9eASs5PBcB4Tl7Yv7CQE8j7yROQf7FYnw5AAABAFgCJwQ5A30AGQAAQSYmIyIGBzU2NjMyFhcWFjMyNjcVBgYjIiYCJUtqLjp9MzN/Tjx4YUtrLTt8MjJ/Tzx3AmggGEcy5zY3FykgF0Yz5zY3FwAAAAEAAABgAJEAFgBfAAUAAQAAAAAAAAAAAAAAAAADAAEAAAAAAAAAHwA1AGsAvgENAWwBewGdAcIB5gH+AhUCIgI4AkgCfgKaAskDDgM4A28DuAPLBCUEbgSTBLoEzwTjBPgFOgWvBdgGEwZHBm4GhgabBtIG6wb4BxgHOQdJB3UHmgfTB/sIPAhpCLAIwwjnCQkJUAlwCYkJoAmzCcMJ1QnqCfgKEQpQCosKuwr1CykLUgu+C+oMCAw2DF4MawynDMwNAA1ADXsNoQ3hDgkOMA5PDpYOtQ7nDv4PNw9ED30PpwAAAAEAAAADAMWlBo0kXw889QALCAAAAAAA2czC9wAAAADhe9up+wz9pAqNCI0AAQAGAAIAAAAAAAAEzQDBAhQAAAJKAHUDxwCFBSsALQSTAFgHNQA/BgAAUgIhAIUCtgBSArYAPQRcAD8EkwBYAkgAPwKTAD0CSAB1A04ADgSTAEoEkwB5BJMATgSTAE4EkwAjBJMAZASTAEgEkwA3BJMASASTAEICSAB1AkgAPwSTAFgEkwBYBJMAWAPRAAYHLQBmBYUAAAVgALgFGQB3BewAuAR7ALgEZAC4BcsAdwYfALgCpgC4Aqb/aAVQALgEhQC4B4sAuAaBALgGXgB3BQYAuAZeAHcFSAC4BGgAXgSiACkGDACuBTMAAAe8AAAFVgAABP4AAASiADECpgCPA04ADAKmADMEkwAvA0r//ALlAFIE1QBWBRAAoAQdAFwFEABcBLoAXAMZACkEhQAGBUIAoAJxAJMCcf99BPYAoAJxAKAH2wCgBUIAoAT0AFwFEACgBRAAXAOiAKAD+gBcA3kALwVCAJoEjQAABtkAFASgAAoEjQAAA+cANwMnAB8EaAHHAycAUgSTAFgAAQAACI39qAAACo37DPzuCo0AAQAAAAAAAAAAAAAAAAAAAGAABATqArwABQAABTMEzQAAAJoFMwTNAAACzQAyApIAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAR09PRwGgACAAfgiN/agAAAj+AosAAAABAAAAAARIBbYAAAAgAAQAAAACAAAAAwAAABQAAwABAAAAFAAEACAAAAAEAAQAAQAAAH7//wAAACD////hAAEAAAAAAAAADQCiAAMAAQQJAAAArAAAAAMAAQQJAAEAEgCsAAMAAQQJAAIACAC+AAMAAQQJAAMAMADGAAMAAQQJAAQAHAD2AAMAAQQJAAUAGgESAAMAAQQJAAYAGgEsAAMAAQQJAQAADAFGAAMAAQQJAQEACgFSAAMAAQQJAQYACAC+AAMAAQQJARoADAFcAAMAAQQJARwADAFoAAMAAQQJAR0ACgF0AEMAbwBwAHkAcgBpAGcAaAB0ACAAMgAwADIAMAAgAFQAaABlACAATwBwAGUAbgAgAFMAYQBuAHMAIABQAHIAbwBqAGUAYwB0ACAAQQB1AHQAaABvAHIAcwAgACgAaAB0AHQAcABzADoALwAvAGcAaQB0AGgAdQBiAC4AYwBvAG0ALwBnAG8AbwBnAGwAZQBmAG8AbgB0AHMALwBvAHAAZQBuAHMAYQBuAHMAKQBPAHAAZQBuACAAUwBhAG4AcwBCAG8AbABkADMALgAwADAAMwA7AEcATwBPAEcAOwBPAHAAZQBuAFMAYQBuAHMALQBCAG8AbABkAE8AcABlAG4AIABTAGEAbgBzACAAQgBvAGwAZABWAGUAcgBzAGkAbwBuACAAMwAuADAAMAAzAE8AcABlAG4AUwBhAG4AcwAtAEIAbwBsAGQAVwBlAGkAZwBoAHQAVwBpAGQAdABoAE4AbwByAG0AYQBsAEkAdABhAGwAaQBjAFIAbwBtAGEAbgADAAAAAAAA/5wAMgAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAwAIAAoADQAH//8ADwABAAAADAAAAAAAAAACAAIAIgA7AAEAQgBbAAEAAQAAAAoAHAAeAAFERkxUAAgABAAAAAD//wAAAAAAAAABAAAACgA4ADoABURGTFQAIGN5cmwAKmdyZWsAKmhlYnIAKmxhdG4AKgAEAAAAAP//AAAAAAAAAAAAAAABAAEACAADAAAAFAADAAAALAACd2R0aAEBAAB3Z2h0AQAAAWl0YWwBHAACAAYAEgAeAAEAAAACARoAZAAAAAEAAQAAAQYCvAAAAAMAAgACAR0AAAAAAAEAAAAA';
+function buildPDF(k){
+ calc();const g=id=>$(id).value||'';const doc=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
+ const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),m=34,CW=W-2*m,s=v=>v*k,y=s(34);let cy;
+ const T2=readTC(),V=tcVars(T2),nn=+$('nights').textContent||0;
+ let tx=m;
+ if(logo&&logo.data){try{const lw=Math.min(140,logo.w*s(40)/logo.h),lh=lw*logo.h/logo.w;doc.addImage(logo.data,logo.data.startsWith('data:image/png')?'PNG':'JPEG',m,y-s(24),lw,lh);tx=m+lw+12}catch(e){}}
+ let hf='helvetica';try{doc.addFileToVFS('OpenSans-Bold.ttf',OSB);doc.addFont('OpenSans-Bold.ttf','OpenSans','bold');hf='OpenSans'}catch(e){}
+ doc.setFont(hf,'bold');doc.setFontSize(s(17));const nw=doc.getTextWidth('VOYA LANKA TOURS');doc.setFontSize(s(17)-s(0.8));doc.setTextColor(3,67,90);doc.text('VOYA LANKA TOURS',tx,y);doc.setFontSize(10);const sw=doc.getTextWidth('MORE THAN A DESTINATION'),sz=Math.min(s(14),10*nw/sw)-s(3.2);
+ doc.setFontSize(sz);doc.setTextColor(139,111,71);doc.text('MORE THAN A DESTINATION',tx,y+s(15));
+ doc.setFont('helvetica','bold');doc.setFontSize(s(11));doc.setTextColor(2,132,199);doc.text(g('qno'),W-m,y,{align:'right'});
+ doc.setFont('helvetica','normal');doc.setFontSize(s(8));doc.setTextColor(100,116,139);doc.text('Date: '+new Date().toISOString().slice(0,10),W-m,y+s(12),{align:'right'});
+ doc.setDrawColor(2,132,199);doc.setLineWidth(1.2);doc.line(m,y+s(25),W-m,y+s(25));
+ doc.setFont('helvetica','bold');doc.setFontSize(s(13));doc.setTextColor(15,23,42);doc.text('QUOTATION',W/2,y+s(46),{align:'center'});
+ const hs={fillColor:[3,105,161],textColor:255,fontSize:s(8),cellPadding:s(3)},bs={fontSize:s(7.5),cellPadding:s(3),textColor:[15,23,42],lineColor:[203,213,225],lineWidth:.5};
+ const co=company||{},coLines=['Voya Lanka Tours',co.address,co.phone&&'Tel: '+co.phone,co.email&&'Email: '+co.email,co.website&&'Web: '+co.website,co.reg&&'Reg. No: '+co.reg].filter(Boolean),hasCo=coLines.length>1;
+ const cust='Name: '+(g('custName')||'Valued Guest')+'\nEmail: '+(g('custEmail')||'N/A')+'\nPhone / WhatsApp: '+(g('custPhone')||'N/A')+'\nCountry: '+(g('custCountry')||'N/A');
+ const trav='Arrival Date: '+(g('travelDate')||'Flexible')+'\nNotes: '+(g('custNotes')||'None');
+ doc.autoTable({startY:y+s(55),theme:'grid',margin:{left:m,right:m},head:[hasCo?['COMPANY DETAILS','CUSTOMER DETAILS','TRAVEL INFO']:['CUSTOMER DETAILS','TRAVEL INFO']],headStyles:hs,styles:bs,body:[hasCo?[coLines.join('\n'),cust,trav]:[cust,trav]]});
+ cy=doc.lastAutoTable.finalY+s(12);
+ doc.setFont('helvetica','bold');doc.setFontSize(s(9.5));doc.setTextColor(2,132,199);doc.text('TOUR DETAILS',m,cy);
+ doc.autoTable({startY:cy+s(4),theme:'grid',margin:{left:m,right:m},body:tourSummary(),styles:{...bs,fontSize:s(8),cellPadding:s(3)},columnStyles:{0:{fillColor:[214,230,244],textColor:[10,50,100],fontStyle:'bold',cellWidth:120}}});
+ cy=doc.lastAutoTable.finalY+s(12);
+ const bh=s(70);doc.setFillColor(248,250,252);doc.setDrawColor(15,23,42);doc.setLineWidth(.8);doc.rect(m,cy,CW,bh,'FD');
+ doc.setFont('helvetica','normal');doc.setFontSize(s(8));doc.setTextColor(100,116,139);doc.text('Exchange rate: 1 USD = '+g('usdRate')+' LKR',m+8,cy+s(14));
+ if(LC.dAmt>0){const lb=LC.dt==='pct'?LC.dv+'%':LC.dt==='usd'?'USD '+LC.dv:'LKR '+LC.dv;
+  doc.text('Price before discount: '+fL(LC.pre)+' / '+fU(LC.pre/LC.rate),m+8,cy+s(25));
+  doc.setTextColor(5,150,105);doc.text('Discount ('+lb+'): - '+fL(LC.dAmt)+' / - '+fU(LC.dAmt/LC.rate),m+8,cy+s(36));}
+ doc.setFont('helvetica','bold');doc.setFontSize(s(8));doc.setTextColor(100,116,139);doc.text('TOTAL PACKAGE PRICE',W-m-8,cy+s(13),{align:'right'});
+ doc.setFontSize(s(14));doc.setTextColor(15,23,42);doc.text($('finLKR').textContent,W-m-8,cy+s(29),{align:'right'});
+ doc.setFontSize(s(11));doc.setTextColor(2,132,199);doc.text($('finUSD').textContent,W-m-8,cy+s(42),{align:'right'});
+ doc.setDrawColor(203,213,225);doc.setLineWidth(.5);doc.line(m+8,cy+s(50),W-m-8,cy+s(50));
+ doc.setFontSize(s(9));doc.setTextColor(15,23,42);doc.text('PER PERSON PACKAGE COST ('+LC.pax+' pax)',m+8,cy+s(63));
+ doc.setTextColor(2,132,199);doc.text(fL(LC.fin/LC.pax)+'   |   '+fU(LC.usd/LC.pax),W-m-8,cy+s(63),{align:'right'});
+ cy+=bh+s(13);
+ doc.setFont('helvetica','bold');doc.setFontSize(s(8));doc.setTextColor(15,23,42);
+ const payL=doc.splitTextToSize(fill(PAY_TPL,V),CW);doc.text(payL,m,cy);cy+=payL.length*s(10)+s(8);
+ const lines=t=>t.split('\n').map(x=>x.trim()).filter(x=>x&&!(nn===0&&x.includes('{nights}'))).map(x=>fill(x,V));
+ const incl=lines(T2.incl),excl=lines(T2.excl),rws=[];for(let i=0;i<Math.max(incl.length,excl.length);i++)rws.push([incl[i]?'\u2022 '+incl[i]:'',excl[i]?'\u2022 '+excl[i]:'']);
+ doc.setFontSize(s(9.5));doc.setTextColor(2,132,199);doc.text('PACKAGE INCLUSIONS & EXCLUSIONS',m,cy);
+ doc.autoTable({startY:cy+s(4),theme:'grid',margin:{left:m,right:m},head:[['INCLUSIONS','EXCLUSIONS']],headStyles:hs,styles:{...bs,cellPadding:s(2.5)},body:rws,columnStyles:{0:{cellWidth:CW/2},1:{cellWidth:CW/2}}});
+ cy=doc.lastAutoTable.finalY+s(14);
+ doc.setFont('helvetica','bold');doc.setFontSize(s(9.5));doc.setTextColor(2,132,199);doc.text('TERMS & CONDITIONS',m,cy);cy+=s(11);
+ doc.setFont('helvetica','normal');doc.setFontSize(s(7.5));doc.setTextColor(15,23,42);
+ lines(T2.terms).forEach(t=>{const l=doc.splitTextToSize('\u2022 '+t,CW-8);doc.text(l,m,cy);cy+=l.length*s(9.5)+s(2)});
+ cy+=s(8);const ty=doc.splitTextToSize(fill(T2.thanks,V),CW);
+ doc.setFont('helvetica','bolditalic');doc.setFontSize(s(8.5));doc.setTextColor(2,132,199);doc.text(ty,W/2,cy,{align:'center'});cy+=ty.length*s(10);
+ const pc=doc.getNumberOfPages();for(let p=1;p<=pc;p++){doc.setPage(p);
+  if(logo&&logo.data){try{doc.saveGraphicsState();doc.setGState(new doc.GState({opacity:.07}));const ww=Math.min(320,380*logo.w/logo.h),wh=ww*logo.h/logo.w;doc.addImage(logo.data,logo.data.startsWith('data:image/png')?'PNG':'JPEG',(W-ww)/2,(H-wh)/2,ww,wh);doc.restoreGraphicsState()}catch(e){}}
+  doc.setFont('helvetica','normal');doc.setFontSize(s(7));doc.setTextColor(148,163,184);
+  doc.text('Voya Lanka Tours - Rates valid for '+V.validDays+' days from date of issue',W/2,H-s(18),{align:'center'});
+  if(hasCo){const fl=doc.splitTextToSize(coLines.slice(1).join('  |  '),CW);doc.text(fl,W/2,H-s(18)-fl.length*s(9),{align:'center'})}
+  if(pc>1)doc.text('Page '+p+' of '+pc,W-m,H-s(18),{align:'right'})}
+ doc.__end=cy;doc.__limit=H-s(48);return doc}
+function makePDF(){let k=1.25,d;for(let i=0;i<14;i++){d=buildPDF(k);if(d.getNumberOfPages()===1&&d.__end<=d.__limit)break;k-=.05}return d.output('blob')}
+let vNight=null,lastConf='';
+function openVoucher(btn){const c=btn.closest('.night-card');vNight=c.dataset.night;$('vTitle').textContent='Export Room Voucher - Night '+vNight;$('vName').value=lastConf;const m=$('vModal');m.classList.remove('hidden');m.classList.add('flex');setTimeout(()=>$('vName').focus(),50)}
+function closeV(){const m=$('vModal');m.classList.add('hidden');m.classList.remove('flex')}
+function buildVoucher(n,by){
+ const g=id=>$(id).value||'';const doc=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
+ const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),m=40,CW=W-2*m,y=54;let tx=m;
+ if(logo&&logo.data){try{const lw=Math.min(140,logo.w*44/logo.h),lh=lw*logo.h/logo.w;doc.addImage(logo.data,logo.data.startsWith('data:image/png')?'PNG':'JPEG',m,y-28,lw,lh);tx=m+lw+14}catch(e){}}
+ let hf='helvetica';try{doc.addFileToVFS('OpenSans-Bold.ttf',OSB);doc.addFont('OpenSans-Bold.ttf','OpenSans','bold');hf='OpenSans'}catch(e){}
+ doc.setFont(hf,'bold');doc.setFontSize(21.25);const nw=doc.getTextWidth('VOYA LANKA TOURS');doc.setFontSize(20.25);doc.setTextColor(3,67,90);doc.text('VOYA LANKA TOURS',tx,y);
+ doc.setFontSize(10);const sw=doc.getTextWidth('MORE THAN A DESTINATION');doc.setFontSize(Math.min(17.5,10*nw/sw)-4);doc.setTextColor(139,111,71);doc.text('MORE THAN A DESTINATION',tx,y+17);
+ doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(2,132,199);doc.text('Voucher No: '+g('qno')+'-N'+n,W-m,y-4,{align:'right'});
+ doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(100,116,139);doc.text('Issued: '+new Date().toISOString().slice(0,10),W-m,y+10,{align:'right'});
+ doc.setDrawColor(2,132,199);doc.setLineWidth(1.2);doc.line(m,y+30,W-m,y+30);
+ const total=document.querySelectorAll('.night-card').length;
+ doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(15,23,42);doc.text('ROOM VOUCHER',W/2,y+56,{align:'center'});
+ doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(100,116,139);doc.text('Night '+n+' of '+total,W/2,y+70,{align:'center'});
+ const hs={fillColor:[3,105,161],textColor:255,fontSize:9,cellPadding:5},bs={fontSize:9,cellPadding:5,textColor:[15,23,42],lineColor:[203,213,225],lineWidth:.5};
+ const fmt=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+ let ci='As per itinerary',co='As per itinerary';const td=g('travelDate');if(td){const d0=new Date(td+'T00:00:00');if(!isNaN(d0)){const a=new Date(d0);a.setDate(a.getDate()+(+n-1));const b=new Date(a);b.setDate(b.getDate()+1);ci=fmt(a);co=fmt(b)}}
+ const ad=+g('paxAdults')||0,c12=+g('paxChild12')||0,c5=+g('paxChild5')||0,ch=c12+c5;
+ const guests=ad+' Adult'+(ad===1?'':'s')+(ch?' + '+ch+' '+(ch===1?'Child':'Children'):'');
+ const info=[['Guest Name',g('custName')||'Valued Guest'],['Country',g('custCountry')||'-'],['Guests',guests],['Check-in',ci],['Check-out',co],['Special Requests',g('custNotes')||'None']];
+ doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(2,132,199);doc.text('GUEST & STAY DETAILS',m,y+92);
+ doc.autoTable({startY:y+98,theme:'grid',margin:{left:m,right:m},body:info,styles:bs,columnStyles:{0:{fillColor:[214,230,244],textColor:[10,50,100],fontStyle:'bold',cellWidth:130}}});
+ const card=document.querySelector('.night-card[data-night="'+n+'"]'),rows=[];
+ if(card)[...card.querySelectorAll('.room-row')].forEach((r,i)=>{const d=roomData(r);rows.push(['Room '+(i+1),d.hotel+'\n'+d.category,d.roomCategory+'\n'+d.roomView,d.bedType,d.meal,(parseFloat(d.cost)||0).toLocaleString()])});
+ let cy=doc.lastAutoTable.finalY+26;
+ doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(2,132,199);doc.text('ROOM DETAILS',m,cy);
+ doc.autoTable({startY:cy+6,theme:'grid',margin:{left:m,right:m},head:[['Room','Hotel','Room Category & View','Bed / Occupancy','Meal Plan','Rate / Night (LKR)']],headStyles:hs,styles:bs,body:rows,foot:[['','','','','Night total (LKR)',rows.reduce((t,r)=>t+(parseFloat(String(r[5]).replace(/,/g,''))||0),0).toLocaleString()]],showFoot:'lastPage',footStyles:{fillColor:[214,230,244],textColor:[10,50,100],fontStyle:'bold',fontSize:9,cellPadding:5},columnStyles:{5:{halign:'right',cellWidth:78}}});
+ cy=doc.lastAutoTable.finalY+28;
+ doc.setFillColor(240,249,255);doc.setDrawColor(2,132,199);doc.setLineWidth(1);doc.rect(m,cy,CW,74,'FD');
+ doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(100,116,139);doc.text('ROOM CONFIRMED BY',m+14,cy+20);
+ doc.setFontSize(15);doc.setTextColor(15,23,42);doc.text(by,m+14,cy+44);
+ doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(100,116,139);doc.text('Confirmation date: '+fmt(new Date()),m+14,cy+62);
+ doc.setDrawColor(148,163,184);doc.setLineWidth(.6);doc.line(W-m-170,cy+52,W-m-14,cy+52);doc.text('Authorised signature',W-m-92,cy+64,{align:'center'});
+ cy+=74+24;doc.setFontSize(8.5);doc.setTextColor(100,116,139);
+ const note=doc.splitTextToSize('This voucher confirms the room arrangement above for the stated night. Please present it at hotel check-in. Hotel check-in and check-out times and policies apply.',CW);doc.text(note,m,cy);
+ const co2=company||{},cl=[co2.address,co2.phone&&'Tel: '+co2.phone,co2.email&&'Email: '+co2.email,co2.website&&'Web: '+co2.website,co2.reg&&'Reg. No: '+co2.reg].filter(Boolean);
+ doc.setFontSize(7.5);doc.setTextColor(148,163,184);if(cl.length)doc.text(cl.join('  |  '),W/2,H-30,{align:'center',maxWidth:CW});doc.text('Voya Lanka Tours',W/2,H-20,{align:'center'});
+ return doc.output('blob')}
+async function exportVoucher(){const by=$('vName').value.trim();if(!by){toast('Please enter who confirmed the room');$('vName').focus();return}
+ lastConf=by;const n=vNight;vconf[n]=by;draftSoon();closeV();let dl=null;try{dl=await claude.use('downloads')}catch(e){}
+ if(!dl){toast('Download is not available in this view');return}
+ try{const blob=buildVoucher(n,by);await dl.save({filename:'Voucher-'+($('qno').value||'Draft')+'-Night'+n+'.pdf',data:blob});toast('Voucher saved for Night '+n)}
+ catch(e){if(e&&e.code==='declined')return;toast('Could not create the voucher')}}
+const DEF_CO={address:'No. 93/2, Dabare Mawatha, Narahenpita, Colombo 05, Sri Lanka',phone:'+94 77 021 6300',email:'info@voyalankatours.com',website:'www.voyalankatours.com',reg:''};
+const LEGAL='VOYA LANKA TOURS (PVT) LTD.',IT_GREET='We are pleased to present your final Sri Lanka tour itinerary, carefully prepared according to your travel schedule. We trust this journey will provide you with unforgettable experiences, cultural discoveries, scenic landscapes, and warm Sri Lankan hospitality.',IT_CLOSE='We thank you for choosing Voya Lanka Tours and look forward to welcoming you to the Pearl of the Indian Ocean.';
+let itin=null;
+function coEff(){return company&&Object.keys(company).length?company:DEF_CO}
+function nightHotel(n){const c=document.querySelector('.night-card[data-night="'+n+'"]'),r=c&&c.querySelector('.room-row');return r?(roomData(r).hotel||'').replace(/\s+-\s+/,', '):''}
+function dayDate(n){const td=$('travelDate').value;if(!td)return null;const d=new Date(td+'T00:00:00');if(isNaN(d))return null;d.setDate(d.getDate()+n-1);return d}
+function fmtD(d){return d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}
+function rangeText(){const days=parseInt($('numDays').value)||1,s=dayDate(1),e=dayDate(days),tail=days+' Days / '+Math.max(0,days-1)+' Nights';
+ if(!s)return tail;const same=s.getMonth()===e.getMonth()&&s.getFullYear()===e.getFullYear();
+ return (same?s.getDate()+' - '+fmtD(e):fmtD(s)+' - '+fmtD(e))+' | '+tail}
+function syncItin(force){if(!itin)itin=newItin();const days=parseInt($('numDays').value)||1,nights=days-1;
+ while(itin.days.length<days)itin.days.push({title:'',acts:'',stay:'',auto:true});itin.days.length=days;
+ itin.days.forEach((d,i)=>{if(force)d.auto=true;if(i<nights){if(d.auto!==false)d.stay=nightHotel(i+1)}else d.stay=''})}
+function newItin(){return{greeting:IT_GREET,closing:IT_CLOSE,days:[]}}
+function renderItin(){$('itGreet').value=itin.greeting;$('itClose').value=itin.closing;$('itSub').textContent=rangeText()+'  |  '+($('qno').value||'');
+ $('itDays').innerHTML=itin.days.map((d,i)=>{const dt=dayDate(i+1),last=i===itin.days.length-1;
+  return `<div class="bg-slate-800 border border-slate-700 rounded-xl p-3 space-y-2">
+ <div class="flex items-center gap-2 text-xs font-bold text-amber-400"><span class="w-6 h-6 rounded-full bg-sky-700 text-white flex items-center justify-center">${i+1}</span>DAY ${i+1}${dt?' - '+fmtD(dt).toUpperCase():''}</div>
+ <div><label class="l">Day title (e.g. ARRIVAL IN SRI LANKA - COLOMBO)</label><input class="f" value="${esc(d.title)}" oninput="itin.days[${i}].title=this.value"></div>
+ <div><label class="l">Activities for this day (one per line). Start a line with a time such as 04:30 AM: or with Optional Activity: to make that part bold.</label><textarea rows="5" class="f" oninput="itin.days[${i}].acts=this.value">${esc(d.acts)}</textarea></div>
+ ${last?'':`<div><label class="l">Overnight stay</label><input class="f" value="${esc(d.stay)}" oninput="itin.days[${i}].stay=this.value;itin.days[${i}].auto=false"></div>`}</div>`}).join('')}
+function openItin(){syncItin();renderItin();const m=$('itModal');m.classList.remove('hidden');m.classList.add('flex')}
+function closeItin(){const m=$('itModal');m.classList.add('hidden');m.classList.remove('flex')}
+function itFromHotels(){syncItin(true);renderItin();toast('Overnight stays refreshed from the Night Accommodation cards')}
+function itSave(){saveQuote()}
+function wrapRuns(doc,text,width,size){const mt=text.match(/^(\d{1,2}:\d{2}\s*(?:AM|PM)?|Optional Activity)\s*:\s*(.*)$/i),runs=mt?[{t:mt[1]+':',b:1},{t:mt[2],b:0}]:[{t:text,b:0}],words=[];
+ runs.forEach(r=>r.t.split(/\s+/).filter(Boolean).forEach(w=>words.push({w,b:r.b})));const lines=[[]];let x=0;
+ words.forEach(o=>{doc.setFont('helvetica',o.b?'bold':'normal');doc.setFontSize(size);const ww=doc.getTextWidth(o.w+' ');if(x+ww>width&&lines[lines.length-1].length){lines.push([]);x=0}lines[lines.length-1].push(o);x+=ww});return lines}
+function buildItin(){
+ syncItin();const ns=nightsState();const doc=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
+ const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),m=46,CW=W-2*m,co=coEff(),days=itin.days.length,nights=Math.max(0,days-1);let y=44,tx=m;
+ const fi=logo&&logo.data?(logo.data.startsWith('data:image/png')?'PNG':'JPEG'):null;
+ if(fi){try{const lh=58,lw=Math.min(120,logo.w*lh/logo.h),h2=lw*logo.h/logo.w;doc.addImage(logo.data,fi,m,y-6,lw,h2);tx=m+lw+16}catch(e){}}
+ let hf='helvetica';try{doc.addFileToVFS('OpenSans-Bold.ttf',OSB);doc.addFont('OpenSans-Bold.ttf','OpenSans','bold');hf='OpenSans'}catch(e){}
+ doc.setFont(hf,'bold');doc.setFontSize(21.25);const nw=doc.getTextWidth('VOYA LANKA TOURS');doc.setFontSize(20.25);doc.setTextColor(3,67,90);doc.text('VOYA LANKA TOURS',tx,y+16);
+ doc.setFontSize(10);const sw=doc.getTextWidth('MORE THAN A DESTINATION');doc.setFontSize(Math.min(17.5,10*nw/sw)-4);doc.setTextColor(139,111,71);doc.text('MORE THAN A DESTINATION',tx,y+33);
+ doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(60,90,100);doc.text('WILDLIFE | NATURE | HERITAGE | BEACHES | ADVENTURE | TREKKING | CULTURE',tx,y+50);
+ y+=86;const rule=()=>{doc.setDrawColor(148,163,184);doc.setLineWidth(.6);doc.line(m,y,W-m,y);y+=14},ensure=h=>{if(y+h>H-46){doc.addPage();y=46}};
+ doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(15,23,42);doc.text('SRI LANKA TOUR ITINERARY',m,y);y+=18;
+ doc.setFontSize(9);doc.text(rangeText(),m,y);y+=13;doc.text(LEGAL,m,y);y+=12;
+ doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(60,70,85);
+ if(co.address){doc.text(co.address,m,y);y+=11}
+ const cl=[co.website&&'Web: '+co.website,co.email&&'Email: '+co.email,co.phone&&'Tel: '+co.phone].filter(Boolean).join(' | ');if(cl){doc.text(cl,m,y);y+=11}
+ y+=4;rule();
+ doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(15,23,42);doc.text('Dear Sir/Madam,',m,y);y+=12;
+ doc.setFont('helvetica','normal');const gl=doc.splitTextToSize(itin.greeting,CW);doc.text(gl,m,y);y+=gl.length*11.5+2;rule();
+ itin.days.forEach((d,i)=>{const dt=dayDate(i+1),acts=d.acts.split('\n').map(x=>x.trim()).filter(Boolean).map(a=>wrapRuns(doc,a,CW-30,9)),last=i===days-1;
+  const nl=acts.reduce((s,l)=>s+l.length,0),bh=14+(d.title?13:0)+nl*11.5+acts.length*2+(!last&&d.stay?16:0)+(!last&&ns[i]&&ns[i].length?14:0)+16;
+  if(bh<H-140)ensure(bh);else ensure(60);
+  doc.setFont('helvetica','bold');doc.setFontSize(9.5);doc.setTextColor(15,23,42);doc.text('DAY '+(i+1)+(dt?' - '+fmtD(dt).toUpperCase():''),m,y);y+=13;
+  if(d.title){doc.text(d.title.toUpperCase(),m,y);y+=13}
+  acts.forEach(lines=>{lines.forEach((ln,li)=>{ensure(13);if(li===0){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('\u2022',m+12,y)}let x=m+28;
+   ln.forEach(o=>{doc.setFont('helvetica',o.b?'bold':'normal');doc.setFontSize(9);doc.text(o.w,x,y);x+=doc.getTextWidth(o.w+' ')});y+=11.5});y+=2});
+  if(!last&&d.stay){ensure(16);doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text('Overnight Stay:',m,y);const lw2=doc.getTextWidth('Overnight Stay: ');doc.setFont('helvetica','normal');doc.text(d.stay,m+lw2,y);y+=14}
+  if(!last&&ns[i]&&ns[i].length){const rt=ns[i].map(r=>parseFloat(r.cost)||0),tot=rt.reduce((a,b)=>a+b,0);ensure(14);doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(15,23,42);doc.text('Room Rate:',m,y);const w3=doc.getTextWidth('Room Rate: ');doc.setFont('helvetica','normal');doc.text((rt.length>1?rt.map(fL).join(' + ')+' = ':'')+fL(tot)+' per night',m+w3,y);y+=14}
+  y+=2;ensure(16);rule()});
+ const grp=[];itin.days.slice(0,nights).forEach((d,i)=>{if(!d.stay)return;const rate=(ns[i]||[]).reduce((a,r)=>a+(parseFloat(r.cost)||0),0),f=grp.find(g2=>g2.s===d.stay);if(f){f.n++;f.r+=rate}else grp.push({s:d.stay,n:1,r:rate})});
+ if(grp.length){ensure(90);doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(2,132,199);doc.text('ACCOMMODATION SUMMARY',m,y);
+  doc.autoTable({startY:y+6,theme:'grid',margin:{left:m,right:m},head:[['Destination','Hotel','Nights','Room Cost (LKR)']],headStyles:{fillColor:[3,105,161],textColor:255,fontSize:9,cellPadding:5},styles:{fontSize:9,cellPadding:5,textColor:[15,23,42],lineColor:[203,213,225],lineWidth:.5},
+   body:grp.map(g2=>{const k=g2.s.lastIndexOf(',');return[k>0?g2.s.slice(k+1).trim():'-',k>0?g2.s.slice(0,k).trim():g2.s,String(g2.n),Math.round(g2.r).toLocaleString()]}),columnStyles:{2:{halign:'center',cellWidth:55},3:{halign:'right',cellWidth:110}}});y=doc.lastAutoTable.finalY+18}
+ ensure(110);doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(15,23,42);doc.text('Total Duration: '+days+' Days / '+nights+' Nights',m,y);y+=18;
+ const cm=doc.splitTextToSize(itin.closing,CW);doc.text(cm,m,y);y+=cm.length*11.5+10;
+ doc.text('Kind Regards,',m,y);y+=13;doc.text(LEGAL,m,y);y+=12;doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(60,70,85);
+ if(co.address){doc.text(co.address,m,y);y+=11}if(cl)doc.text(cl,m,y);
+ const pc=doc.getNumberOfPages();for(let p=1;p<=pc;p++){doc.setPage(p);
+  if(fi){try{doc.saveGraphicsState();doc.setGState(new doc.GState({opacity:.07}));const ww=320,wh=ww*logo.h/logo.w;doc.addImage(logo.data,fi,(W-ww)/2,(H-wh)/2,ww,wh);doc.restoreGraphicsState()}catch(e){}}
+  doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(148,163,184);doc.text('Voya Lanka Tours',m,H-22);doc.text('Page '+p+' of '+pc,W-m,H-22,{align:'right'})}
+ return doc.output('blob')}
+async function exportItin(){let dl=null;try{dl=await claude.use('downloads')}catch(e){}
+ if(!dl){toast('Download is not available in this view');return}
+ try{const blob=buildItin();await dl.save({filename:'Itinerary-'+($('qno').value||'Draft')+'.pdf',data:blob});toast('Itinerary PDF saved')}catch(e){if(e&&e.code==='declined')return;toast('Could not create the itinerary')}}
+function buildWorkbook(){
+ calc();syncItin();const wb=new ExcelJS.Workbook();wb.creator='Voya Lanka Tours';wb.created=new Date();
+ const g=id=>$(id).value||'',days=parseInt(g('numDays'))||1,nights=Math.max(0,days-1),T2=readTC(),V=tcVars(T2),LKR='#,##0',USD2='#,##0.00',DT='dd mmm yyyy';
+ const thin={style:'thin',color:{argb:'FFCBD5E1'}},bd={top:thin,left:thin,bottom:thin,right:thin};
+ const HF={type:'pattern',pattern:'solid',fgColor:{argb:'FF0369A1'}},LF={type:'pattern',pattern:'solid',fgColor:{argb:'FFD6E6F4'}},GF={type:'pattern',pattern:'solid',fgColor:{argb:'FFEAF6EE'}};
+ const head=row=>row.eachCell(c=>{c.fill=HF;c.font={bold:true,color:{argb:'FFFFFFFF'}};c.border=bd;c.alignment={vertical:'middle',wrapText:true}});
+ const title=(ws,t,span)=>{ws.mergeCells(1,1,1,span);const c=ws.getCell(1,1);c.value=t;c.font={bold:true,size:16,color:{argb:'FF03435A'}};ws.mergeCells(2,1,2,span);const d=ws.getCell(2,1);d.value='MORE THAN A DESTINATION';d.font={bold:true,size:10,color:{argb:'FF8B6F47'}};ws.addRow([])};
+ const sQ=wb.addWorksheet('Quotation'),sC=wb.addWorksheet('Costing'),sA=wb.addWorksheet('Accommodation'),sO=wb.addWorksheet('Other Charges'),sI=wb.addWorksheet('Itinerary'),sT=wb.addWorksheet('Terms & Payment'),sS=wb.addWorksheet('All Saved Quotations');
+ const td=dayDate(1);
+ // Accommodation
+ sA.columns=[{width:9},{width:14},{width:9},{width:34},{width:16},{width:18},{width:16},{width:16},{width:18},{width:18},{width:22}];title(sA,'VOYA LANKA TOURS - ACCOMMODATION',11);
+ const ah=sA.addRow(['Night','Date','Room','Hotel','Hotel Category','Room Category','Room View','Bed / Occupancy','Meal Plan','Rate / Night (LKR)','Room Confirmed By']);head(ah);
+ let aFirst=null,aLast=null;nightsState().forEach((rooms,ni)=>{const d=dayDate(ni+1);rooms.forEach((r,ri)=>{const row=sA.addRow([ni+1,d||'',ri+1,r.hotel,r.category,r.roomCategory,r.roomView,r.bedType,r.meal,parseFloat(r.cost)||0,vconf[ni+1]||'']);
+  row.eachCell(c=>c.border=bd);row.getCell(2).numFmt=DT;row.getCell(10).numFmt=LKR;if(!aFirst)aFirst=row.number;aLast=row.number})});
+ let accRef='0';if(aFirst){const t=sA.addRow(['','','','','','','','','TOTAL',{formula:'SUM(J'+aFirst+':J'+aLast+')',result:LC.accom},'']);t.eachCell(c=>{c.border=bd;c.font={bold:true}});t.getCell(10).numFmt=LKR;t.getCell(10).fill=GF;accRef="Accommodation!J"+t.number}
+ sA.views=[{state:'frozen',ySplit:4}];
+ // Other charges
+ sO.columns=[{width:44},{width:20}];title(sO,'VOYA LANKA TOURS - OTHER CHARGES',2);const oh=sO.addRow(['Item','Amount (LKR)']);head(oh);
+ const o1=sO.addRow(['Toll + Parking charges',LC.toll]);o1.eachCell(c=>c.border=bd);o1.getCell(2).numFmt=LKR;let oLast=o1.number;
+ others.forEach(o=>{const row=sO.addRow([o.name||'',o.cost||0]);row.eachCell(c=>c.border=bd);row.getCell(2).numFmt=LKR;oLast=row.number});
+ const ot=sO.addRow(['TOTAL',{formula:'SUM(B'+o1.number+':B'+oLast+')',result:LC.toll+LC.oth}]);ot.eachCell(c=>{c.border=bd;c.font={bold:true}});ot.getCell(2).numFmt=LKR;ot.getCell(2).fill=GF;
+ // Costing
+ sC.columns=[{width:40},{width:22},{width:50}];title(sC,'VOYA LANKA TOURS - COSTING',3);const ch=sC.addRow(['Item','Amount','Notes']);head(ch);
+ const line=(label,val,note,fmt,strong)=>{const row=sC.addRow([label,val,note||'']);row.eachCell(c=>c.border=bd);row.getCell(1).fill=LF;row.getCell(1).font={bold:true};if(fmt)row.getCell(2).numFmt=fmt;row.getCell(2).alignment={horizontal:'right'};if(strong){row.getCell(2).fill=GF;row.getCell(2).font={bold:true}}return row.number};
+ const r1=line('Accommodation & Meals (LKR)',{formula:accRef,result:LC.accom},'Sum of room rates on the Accommodation sheet',LKR);
+ line('Vehicle (LKR)',LC.veh,days+' days x LKR '+(N('vRate')).toLocaleString(),LKR);line('Fuel (LKR)',LC.fuel,N('fuelKm')+' km / '+N('fuelAvg')+' km per L x LKR '+N('fuelPrice'),LKR);
+ line('Driver (LKR)',LC.drv,days+' days x LKR '+N('drvDay').toLocaleString(),LKR);line('Guide daily fee (LKR)',LC.guide,days+' days x LKR '+N('guideFee').toLocaleString(),LKR);
+ line('Guide / driver room (LKR)',LC.crew,nights+' nights x LKR '+N('crewRoom').toLocaleString(),LKR);line('Toll + Parking (LKR)',LC.toll,'',LKR);const rLast=line('Other charges (LKR)',LC.oth,'See Other Charges sheet',LKR);
+ const rTot=line('TOTAL COST (LKR)',{formula:'SUM(B'+r1+':B'+rLast+')',result:LC.sub},'',LKR,1);
+ const rPct=line('Markup (%)',N('markup'),'','0.##');const rMk=line('Markup amount (LKR)',{formula:'B'+rTot+'*B'+rPct+'/100',result:LC.mk},'',LKR);
+ const rPre=line('Price before discount (LKR)',{formula:'B'+rTot+'+B'+rMk,result:LC.pre},'',LKR);
+ const rRate=line('Exchange rate (1 USD = LKR)',N('usdRate'),'Manual rate','#,##0.00');
+ const rDt=line('Discount type',{pct:'Percentage (%)',lkr:'Amount (LKR)',usd:'Amount (USD)'}[LC.dt],'Only one type applies');const rDv=line('Discount value',LC.dv,'','0.##');
+ const dF=LC.dt==='pct'?'MIN(B'+rPre+',B'+rPre+'*B'+rDv+'/100)':LC.dt==='usd'?'MIN(B'+rPre+',B'+rDv+'*B'+rRate+')':'MIN(B'+rPre+',B'+rDv+')';
+ const rDa=line('Discount amount (LKR)',{formula:dF,result:LC.dAmt},'',LKR);
+ const rFin=line('FINAL PACKAGE PRICE (LKR)',{formula:'B'+rPre+'-B'+rDa,result:LC.fin},'',LKR,1);const rUsd=line('FINAL PACKAGE PRICE (USD)',{formula:'B'+rFin+'/B'+rRate,result:LC.usd},'',USD2,1);
+ const rPax=line('Travellers (pax)',LC.pax,'Adults + all children');line('Per person (LKR)',{formula:'B'+rFin+'/B'+rPax,result:LC.fin/LC.pax},'',LKR,1);line('Per person (USD)',{formula:'B'+rUsd+'/B'+rPax,result:LC.usd/LC.pax},'',USD2,1);
+ const rDep=line('Advance / deposit (%)',T2.dep,'','0.##');const depU=Math.round(LC.usd*T2.dep)/100;const rDU=line('Advance / deposit (USD)',{formula:'ROUND(B'+rUsd+'*B'+rDep+'/100,2)',result:depU},'Due upon confirmation',USD2);
+ line('Balance (USD)',{formula:'B'+rUsd+'-B'+rDU,result:LC.usd-depU},'Due before arrival in Sri Lanka',USD2);
+ // Quotation details
+ sQ.columns=[{width:30},{width:60}];title(sQ,'VOYA LANKA TOURS - QUOTATION',2);
+ const qh=sQ.addRow(['Field','Details']);head(qh);
+ const ad=+g('paxAdults')||0,c12=+g('paxChild12')||0,c5=+g('paxChild5')||0;
+ [['Quotation No.',g('qno')],['Date issued',new Date()],['Customer name',g('custName')],['Email',g('custEmail')],['Phone / WhatsApp',g('custPhone')],['Country / Nationality',g('custCountry')],['Arrival date',td||'Flexible'],['Duration',days+' Days / '+nights+' Nights'],['Adults (12+)',ad],['Children (< 12)',c12],['Children (< 5)',c5],['Total pax',ad+c12+c5],['Vehicle',g('vehicleType')],['Guide',g('guideType')],['Total kilometers',N('fuelKm')],['Special remarks',g('custNotes')],['Final price (LKR)',LC.fin],['Final price (USD)',LC.usd],['Per person (LKR)',LC.fin/LC.pax],['Per person (USD)',LC.usd/LC.pax]].forEach(([k,v])=>{const row=sQ.addRow([k,v]);row.eachCell(c=>c.border=bd);row.getCell(1).fill=LF;row.getCell(1).font={bold:true};row.getCell(2).alignment={horizontal:'left',wrapText:true};
+  if(v instanceof Date)row.getCell(2).numFmt=DT;if(k.includes('(LKR)'))row.getCell(2).numFmt=LKR;if(k.includes('(USD)'))row.getCell(2).numFmt=USD2});
+ // Itinerary
+ sI.columns=[{width:8},{width:16},{width:40},{width:80},{width:36},{width:22},{width:60}];title(sI,'VOYA LANKA TOURS - TOUR ITINERARY',7);const ih=sI.addRow(['Day','Date','Title','Activities','Overnight Stay','Room Rate / Night (LKR)','Rooms']);head(ih);
+ const nsx=nightsState();itin.days.forEach((d,i)=>{const rs=(i<nights&&nsx[i])||[];const row=sI.addRow([i+1,dayDate(i+1)||'',d.title||'',d.acts.split('\n').map(x=>x.trim()).filter(Boolean).map(x=>'\u2022 '+x).join('\n'),i<nights?d.stay||'':'',rs.reduce((a,r)=>a+(parseFloat(r.cost)||0),0),rs.map((r,k)=>'Room '+(k+1)+': '+r.roomCategory+', '+r.bedType+', '+r.meal+' - LKR '+(parseFloat(r.cost)||0).toLocaleString()).join('\n')]);row.getCell(6).numFmt=LKR;row.eachCell(c=>{c.border=bd;c.alignment={vertical:'top',wrapText:true}});row.getCell(2).numFmt=DT});
+ sI.views=[{state:'frozen',ySplit:4}];
+ // Terms & payment
+ sT.columns=[{width:70},{width:70}];title(sT,'VOYA LANKA TOURS - PAYMENT, INCLUSIONS, EXCLUSIONS & TERMS',2);
+ sT.mergeCells(4,1,4,2);const pc=sT.getCell(4,1);pc.value=fill(PAY_TPL,V);pc.font={bold:true};pc.fill=GF;pc.border=bd;sT.addRow([]);
+ head(sT.addRow(['Package inclusions','Package exclusions']));
+ const lines=t=>t.split('\n').map(x=>x.trim()).filter(x=>x&&!(nights===0&&x.includes('{nights}'))).map(x=>fill(x,V)),inc=lines(T2.incl),exc=lines(T2.excl);
+ for(let i=0;i<Math.max(inc.length,exc.length);i++){const row=sT.addRow([inc[i]||'',exc[i]||'']);row.eachCell(c=>{c.border=bd;c.alignment={wrapText:true,vertical:'top'}})}
+ sT.addRow([]);const th=sT.addRow(['Terms & conditions','']);head(th);lines(T2.terms).forEach(t=>{const row=sT.addRow([t,'']);sT.mergeCells(row.number,1,row.number,2);row.getCell(1).border=bd;row.getCell(1).alignment={wrapText:true}});
+ // All saved quotations
+ const cols=['Quotation ID','Saved On','Customer','Email','Phone','Country','Arrival Date','Days','Nights','Adults','Children <12','Children <5','Vehicle','Guide','Markup %','Discount','Final LKR','Final USD','Notes'];
+ sS.columns=[16,14,24,28,18,18,14,8,8,8,12,12,32,36,10,16,16,14,40].map(w=>({width:w}));title(sS,'VOYA LANKA TOURS - ALL SAVED QUOTATIONS',cols.length);const sh=sS.addRow(cols);head(sh);
+ const num=v=>{const n=Number(String(v==null?'':v).replace(/[^0-9.]/g,''));return isNaN(n)?0:n};
+ getSaved().forEach(q=>{const dd=q.travelDate?new Date(q.travelDate+'T00:00:00'):'';const dl={pct:'%',lkr:' LKR',usd:' USD'}[q.discType]||'';
+  const row=sS.addRow([q.id,q.savedAt?new Date(q.savedAt):'',q.custName||'',q.custEmail||'',q.custPhone||'',q.custCountry||'',dd,+q.numDays||0,Math.max(0,(+q.numDays||1)-1),+q.paxAdults||0,+q.paxChild12||0,+q.paxChild5||0,q.vehicleType||'',q.guideType||'',+q.markup||0,(+q.discVal||0)?(q.discVal+dl):'None',q.finLKRn!=null?q.finLKRn:num(q.finLKR),q.finUSDn!=null?q.finUSDn:num(q.finUSD),q.custNotes||'']);
+  row.eachCell(c=>c.border=bd);row.getCell(2).numFmt=DT;row.getCell(7).numFmt=DT;row.getCell(17).numFmt=LKR;row.getCell(18).numFmt=USD2});
+ sS.autoFilter={from:{row:4,column:1},to:{row:4,column:cols.length}};sS.views=[{state:'frozen',ySplit:4}];
+ return wb}
+async function exportExcel(){let dl=null;try{dl=await claude.use('downloads')}catch(e){}
+ if(!dl){toast('Download is not available in this view');return}
+ try{const wb=buildWorkbook(),buf=await wb.xlsx.writeBuffer(),blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  await dl.save({filename:'Quotation-'+($('qno').value||'Draft')+'.xlsx',data:blob});toast('Excel workbook saved')}catch(e){if(e&&e.code==='declined')return;console.error(e);toast('Could not create the Excel file')}}
+function makePDFOld(){
+ calc();const g=id=>$(id).value||'';const doc=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
+ const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),m=40;let y=48;
+ let tx=m;if(logo&&logo.data){try{const lw=Math.min(150,logo.w*44/logo.h),lh=lw*logo.h/logo.w;doc.addImage(logo.data,logo.data.startsWith('data:image/png')?'PNG':'JPEG',m,y-26,lw,lh);tx=m+lw+14}catch(e){}}
+ doc.setFont('helvetica','bold');doc.setFontSize(18);doc.setTextColor(15,23,42);doc.text('VOYA LANKA TOURS',tx,y);
+ doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(100,116,139);doc.text('MORE THAN A DESTINATION',tx,y+14);
+ doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(2,132,199);doc.text(g('qno'),W-m,y,{align:'right'});
+ doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(100,116,139);doc.text('Date: '+new Date().toISOString().slice(0,10),W-m,y+14,{align:'right'});
+ doc.setDrawColor(2,132,199);doc.setLineWidth(1.5);doc.line(m,y+24,W-m,y+24);
+ doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(15,23,42);doc.text('QUOTATION',W/2,y+50,{align:'center'});
+ const nights=$('nights').textContent,A=g('paxAdults'),C1=g('paxChild12'),C2=g('paxChild5');
+ const co=company||{},coLines=['Voya Lanka Tours',co.address,co.phone&&'Tel: '+co.phone,co.email&&'Email: '+co.email,co.website&&'Web: '+co.website,co.reg&&'Reg. No: '+co.reg].filter(Boolean),hasCo=coLines.length>1;
+ const hs={fillColor:[3,105,161],textColor:255,fontSize:9},bs={fontSize:9,cellPadding:5,textColor:[15,23,42],lineColor:[203,213,225],lineWidth:.5};
+ doc.autoTable({startY:y+66,theme:'grid',margin:{left:m,right:m},head:[hasCo?['COMPANY DETAILS','CUSTOMER DETAILS','TRAVEL INFO']:['CUSTOMER DETAILS','TRAVEL INFO']],headStyles:hs,styles:hasCo?{...bs,fontSize:8}:bs,
+  body:[[...(hasCo?[coLines.join('\n')]:[]),'Name: '+(g('custName')||'Valued Guest')+'\nEmail: '+(g('custEmail')||'N/A')+'\nPhone / WhatsApp: '+(g('custPhone')||'N/A')+'\nCountry: '+(g('custCountry')||'N/A'),
+  'Arrival Date: '+(g('travelDate')||'Flexible')+'\nNotes: '+(g('custNotes')||'None')]]});
+ const rows=[];document.querySelectorAll('.night-card').forEach(card=>card.querySelectorAll('.room-row').forEach(r=>{const d=roomData(r);
+  rows.push(['Night '+card.dataset.night,d.hotel+'\n'+d.category,d.roomCategory+'\n'+d.roomView,d.bedType,d.meal])}));
+ doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(2,132,199);doc.text('TOUR DETAILS',m,doc.lastAutoTable.finalY+26);
+ doc.autoTable({startY:doc.lastAutoTable.finalY+34,theme:'grid',margin:{left:m,right:m},body:tourSummary(),styles:{...bs,fontSize:9.5,cellPadding:6},columnStyles:{0:{fillColor:[214,230,244],textColor:[10,50,100],fontStyle:'bold',cellWidth:130}}});
+ const inc=[['Vehicle','Private '+g('vehicleType')+' for '+g('numDays')+' days'],['Chauffeur / Guide',g('guideType')],['Fuel','Complete fuel charges covered for the tour'],['Tolls & Parking','Expressway tolls and site parking fees included']];
+ others.forEach(o=>{if(o.name)inc.push(['Other',o.name])});
+ doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(2,132,199);void 0;
+ let fy=doc.lastAutoTable.finalY+20;if(fy>H-130){doc.addPage();fy=50}
+ doc.setFillColor(248,250,252);doc.setDrawColor(15,23,42);doc.setLineWidth(1);doc.rect(m,fy,W-2*m,96,'FD');
+ doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(100,116,139);doc.text('Exchange rate: 1 USD = '+g('usdRate')+' LKR',m+10,fy+20);
+ if(LC.dAmt>0){const lb=LC.dt==='pct'?LC.dv+'%':LC.dt==='usd'?'USD '+LC.dv:'LKR '+LC.dv;
+  doc.text('Price before discount: '+fL(LC.pre)+' / '+fU(LC.pre/LC.rate),m+10,fy+34);
+  doc.setTextColor(5,150,105);doc.text('Discount ('+lb+'): - '+fL(LC.dAmt)+' / - '+fU(LC.dAmt/LC.rate),m+10,fy+48);doc.setTextColor(100,116,139)}
+ doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text('TOTAL PACKAGE PRICE',W-m-10,fy+18,{align:'right'});
+ doc.setFontSize(16);doc.setTextColor(15,23,42);doc.text($('finLKR').textContent,W-m-10,fy+40,{align:'right'});
+ doc.setFontSize(13);doc.setTextColor(2,132,199);doc.text($('finUSD').textContent,W-m-10,fy+58,{align:'right'});
+ doc.setDrawColor(203,213,225);doc.setLineWidth(.5);doc.line(m+10,fy+68,W-m-10,fy+68);
+ doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(15,23,42);doc.text('PER PERSON PACKAGE COST ('+LC.pax+' pax)',m+10,fy+85);
+ doc.setTextColor(2,132,199);doc.text(fL(LC.fin/LC.pax)+'   |   '+fU(LC.usd/LC.pax),W-m-10,fy+85,{align:'right'});
+ let cy=fy+118;const need=h=>{if(cy+h>H-60){doc.addPage();cy=50}};
+ const half=(lastUsd/2).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+ doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(15,23,42);
+ const T2=readTC(),V=tcVars(T2);const payL=doc.splitTextToSize(fill(PAY_TPL,V),W-2*m);
+ need(payL.length*12+10);doc.text(payL,m,cy);cy+=payL.length*12+16;
+ const nn=+nights,vt=g('vehicleType'),vtxt=/bus/i.test(vt)?'air-conditioned bus':/van/i.test(vt)?'air-conditioned van':/jeep|suv/i.test(vt)?'7-seater jeep / SUV':'car (sedan)';
+ const catMap={'5-Star Luxury':'5-star hotels','4-Star Premium':'4-star hotels','3-Star Comfort':'3-star hotels','Boutique Villa':'boutique villas'};
+ const cats=[...new Set([...document.querySelectorAll('.cat')].map(s=>s.value))].map(c=>catMap[c]||c),meals=[...new Set([...document.querySelectorAll('.meal')].map(s=>s.value))];
+ const gtxt=g('guideType').replace('-Speaking','-speaking').replace('Chauffeur Guide','chauffeur guide'),water=g('waterQty')||'100';
+ const incl0=['Private '+vtxt+' for '+g('numDays')+' days, as per agreed itinerary','Fuel, highway tolls and parking charges',nn>0?nn+' nights at selected '+(cats.join(' / ')||'hotels')+' with '+meals.join(' / '):null,gtxt,'Passenger insurance cover',water+' × 500 ml bottles of drinking water for the group'].filter(Boolean);
+ const excl0=['International airfare and Sri Lankan visa fees, where applicable','Attraction entrance tickets, activities and excursion fees','Personal expenses, laundry and shopping','Personal travel insurance','Tips and gratuities'];
+ const mk=s=>s.split('\n').map(x=>x.trim()).filter(x=>x&&!(nn===0&&x.includes('{nights}'))).map(x=>fill(x,V));const incl=mk(T2.incl),excl=mk(T2.excl);
+ need(120);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(2,132,199);doc.text('PACKAGE INCLUSIONS & EXCLUSIONS',m,cy);
+ const rws=[];for(let i=0;i<Math.max(incl.length,excl.length);i++)rws.push([incl[i]?'• '+incl[i]:'',excl[i]?'• '+excl[i]:'']);
+ doc.autoTable({startY:cy+8,theme:'grid',margin:{left:m,right:m},head:[['INCLUSIONS','EXCLUSIONS']],headStyles:hs,styles:bs,body:rws,columnStyles:{0:{cellWidth:(W-2*m)/2},1:{cellWidth:(W-2*m)/2}}});
+ cy=doc.lastAutoTable.finalY+26;
+ const vu=new Date(Date.now()+14*864e5).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+ const terms0=['A 50% deposit is required to confirm the booking; the balance must be paid before arrival in Sri Lanka.','This quotation is valid until '+vu+'.','Rates are subject to hotel availability and applicable accommodation prices at the time of booking.','Changes to the itinerary or requested services may affect the final price.'];
+ const terms=mk(T2.terms);need(90);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(2,132,199);doc.text('TERMS & CONDITIONS',m,cy);cy+=16;
+ doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(15,23,42);
+ terms.forEach(t=>{const l=doc.splitTextToSize('• '+t,W-2*m-10);need(l.length*12+4);doc.text(l,m,cy);cy+=l.length*12+3});
+ cy+=14;const ty=doc.splitTextToSize(fill(T2.thanks,V),W-2*m);
+ need(ty.length*14+6);doc.setFont('helvetica','bolditalic');doc.setFontSize(10.5);doc.setTextColor(2,132,199);doc.text(ty,W/2,cy,{align:'center'});
+ const pc=doc.getNumberOfPages();for(let p=1;p<=pc;p++){doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(148,163,184);
+  doc.text('Voya Lanka Tours - Rates valid for '+V.validDays+' days from date of issue',W/2,H-24,{align:'center'});
+  if(hasCo)doc.text(coLines.slice(1).join('  |  '),W/2,H-36,{align:'center',maxWidth:W-2*m});
+  doc.text('Page '+p+' of '+pc,W-m,H-24,{align:'right'})}
+ return doc.output('blob')}
+async function doPrint(){calc();let blob;try{blob=makePDF()}catch(e){toast('Could not prepare the quotation');return}
+ const url=URL.createObjectURL(blob);let w=null;try{w=window.open(url,'_blank')}catch(e){}
+ if(w){toast('Quotation opened - use the PDF viewer Print button');return}
+ let dl=null;try{dl=await claude.use('downloads')}catch(e){}
+ if(!dl){toast('Printing is not available in this view');return}
+ try{await dl.save({filename:'Quotation-'+($('qno').value||'Draft')+'-print.pdf',data:blob});toast('Printing is blocked in this view. PDF saved - open it and press Print.')}catch(e){if(!(e&&e.code==='declined'))toast('Could not prepare the PDF for printing')}}
+
+const FIELDS=['custName','custEmail','custPhone','custCountry','travelDate','custNotes','paxAdults','paxChild12','paxChild5','numDays','usdRate','vehicleType','vRate','fuelKm','fuelAvg','fuelPrice','drvDay','guideType','guideFee','crewRoom','toll','markup','waterQty','discType','discVal'];
+let mem=[],dbCol=null,logo=null,company={},tc=null;
+async function initStore(){try{const db=await claude.use('db'),u=await claude.use('user'),id=u?await u.id():null;
+  if(db&&id){dbCol=db.collection('data/users/'+id);const docs=(await dbCol.get()).docs;
+   mem=docs.filter(d=>d.id.startsWith('q_')).map(d=>d.data());
+   const st=docs.find(d=>d.id==='settings');if(st&&st.data()&&st.data().logo)logo=st.data().logo;
+   if(st&&st.data()&&st.data().company)company=st.data().company;
+   if(st&&st.data()&&st.data().terms)tc=st.data().terms;
+   const old=docs.find(d=>d.id==='quotes');
+   if(old){const list=(old.data()&&old.data().list)||[];for(const r of list){if(!mem.some(m=>m.id===r.id)){const c={...r};if(typeof c.nights!=='string')c.nights=JSON.stringify(c.nights||[]);try{await dbCol.doc('q_'+c.id).set(c);mem.push(c)}catch(e){}}}try{await dbCol.doc('quotes').delete()}catch(e){}}
+   mem.sort((a,b)=>(b.savedAt||'').localeCompare(a.savedAt||''));return}}catch(e){}
+ try{mem=JSON.parse(localStorage.getItem(KEY))||[]}catch(e){mem=[]}
+ try{logo=JSON.parse(localStorage.getItem(KEY+'_logo'))}catch(e){}
+ try{company=JSON.parse(localStorage.getItem(KEY+'_co'))||{}}catch(e){}
+ try{tc=JSON.parse(localStorage.getItem(KEY+'_tc'))}catch(e){}}
+function openCo(){['coAddr','coPhone','coEmail','coWeb','coReg'].forEach((id,i)=>$(id).value=company[['address','phone','email','website','reg'][i]]||'');const m=$('coModal');m.classList.remove('hidden');m.classList.add('flex')}
+function closeCo(){const m=$('coModal');m.classList.add('hidden');m.classList.remove('flex')}
+async function saveCo(){const v=id=>$(id).value.trim();company={address:v('coAddr'),phone:v('coPhone'),email:v('coEmail'),website:v('coWeb'),reg:v('coReg')};closeCo();
+ try{localStorage.setItem(KEY+'_co',JSON.stringify(company))}catch(e){}const ok=await saveLogo();if(ok)toast('Company details saved and will appear on every quotation PDF')}
+const DEF_TC={dep:50,valid:14,
+ incl:['Private {vehicle} for {days} days, as per agreed itinerary','Fuel, highway tolls and parking charges','{nights} nights at selected {hotels} with {meals}','{guide}','Passenger insurance cover','{water} × 500 ml bottles of drinking water for the group'].join('\n'),
+ excl:['International airfare and Sri Lankan visa fees, where applicable','Attraction entrance tickets, activities and excursion fees','Personal expenses, laundry and shopping','Personal travel insurance','Tips and gratuities'].join('\n'),
+ terms:['A {dep}% deposit is required to confirm the booking; the balance must be paid before arrival in Sri Lanka.','This quotation is valid until {validUntil}.','Rates are subject to hotel availability and applicable accommodation prices at the time of booking.','Changes to the itinerary or requested services may affect the final price.'].join('\n'),
+ thanks:'Thank you for choosing Voya Lanka Tours — we look forward to welcoming you to beautiful Sri Lanka!'};
+function curTC(){return {...DEF_TC,...(tc||{})}}
+function loadTCForm(){const t=curTC();$('tcDep').value=t.dep;$('tcValid').value=t.valid;$('tcIncl').value=t.incl;$('tcExcl').value=t.excl;$('tcTerms').value=t.terms;$('tcThanks').value=t.thanks;tcPreview()}
+function readTC(){const d=parseFloat($('tcDep').value);return{dep:isNaN(d)?50:Math.min(100,Math.max(0,d)),valid:parseInt($('tcValid').value)||14,incl:$('tcIncl').value,excl:$('tcExcl').value,terms:$('tcTerms').value,thanks:$('tcThanks').value}}
+function fill(s,v){return String(s).replace(/\{(\w+)\}/g,(a,k)=>k in v?v[k]:a)}
+function tcVars(t){const g=id=>$(id).value||'';const nn=+$('nights').textContent||0,vt=g('vehicleType');
+ const vehicle=/bus/i.test(vt)?'air-conditioned bus':/van/i.test(vt)?'air-conditioned van':/jeep|suv/i.test(vt)?'7-seater jeep / SUV':'car (sedan)';
+ const catMap={'5-Star Luxury':'5-star hotels','4-Star Premium':'4-star hotels','3-Star Comfort':'3-star hotels','Boutique Villa':'boutique villas'};
+ const cats=[...new Set([...document.querySelectorAll('.cat')].map(s=>s.value))].map(c=>catMap[c]||c),meals=[...new Set([...document.querySelectorAll('.meal')].map(s=>s.value))];
+ const dep=t.dep,bal=Math.round((100-dep)*100)/100,u=lastUsd,depA=Math.round(u*dep)/100,balA=Math.round((u-depA)*100)/100;
+ const f=n=>n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const vu=new Date(Date.now()+t.valid*864e5).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+ return{days:g('numDays'),nights:nn,vehicle,hotels:cats.join(' / ')||'hotels',meals:meals.join(' / '),guide:g('guideType').replace('-Speaking','-speaking').replace('Chauffeur Guide','chauffeur guide'),water:g('waterQty')||'100',validUntil:vu,validDays:t.valid,dep,bal,depAmt:f(depA),balAmt:f(balA)}}
+const PAY_TPL='Payment Schedule: {dep}% deposit — USD {depAmt} upon confirmation  |  {bal}% balance — USD {balAmt} before arrival in Sri Lanka';
+function tcPreview(){if(!$('tcDep'))return;const t=readTC(),v=tcVars(t);$('tcBal').textContent=v.bal;$('tcValidDate').textContent=v.validUntil;$('tcPay').textContent=fill(PAY_TPL,v)}
+function resetTC(){tc=null;try{localStorage.removeItem(KEY+'_tc')}catch(e){}loadTCForm();saveLogo();toast('Standard terms restored')}
+async function saveTC(){tc=readTC();try{localStorage.setItem(KEY+'_tc',JSON.stringify(tc))}catch(e){}const ok=await saveLogo();if(ok)toast('Saved as default for all future quotations')}
+const fL=n=>'LKR '+Math.round(n).toLocaleString(),fU=n=>'$ '+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+function tourSummary(){const g=id=>$(id).value||'';const a=+g('paxAdults')||0,ch=(+g('paxChild12')||0)+(+g('paxChild5')||0),nn=+$('nights').textContent||0,vt=g('vehicleType');
+ const guests=a+' Person'+(a===1?'':'s')+(ch?' + '+ch+' '+(ch===1?'Child':'Children'):'');
+ const bedMap={'Single':'Single Room','Double (DBL)':'Double Room','DBL + ExtraBed':'Double Room with Extra Bed'+(ch?' for Child':''),'Twin':'Twin Room','Triple':'Triple Room','Family Suite':'Family Suite'};
+ const catMap={'5-Star Luxury':'5-Star Hotels','4-Star Premium':'4-Star Hotels','3-Star Comfort':'3-Star Hotels','Boutique Villa':'Boutique Villas'};
+ const first=document.querySelector('.night-card');let acc='N/A';
+ if(first){const beds=[...first.querySelectorAll('.room-row')].map(r=>roomData(r).bedType),cnt={};beds.forEach(b=>cnt[b]=(cnt[b]||0)+1);
+  acc=beds.length+' Room'+(beds.length===1?'':'s')+': '+Object.entries(cnt).map(([b,n])=>n+' '+(bedMap[b]||b)).join(' + ')}
+ const cats=[...new Set([...document.querySelectorAll('.cat')].map(s=>s.value))].map(c=>catMap[c]||c),meals=[...new Set([...document.querySelectorAll('.meal')].map(s=>s.value))];
+ const veh='Private '+(/bus/i.test(vt)?'Air-Conditioned Bus':/van/i.test(vt)?'Air-Conditioned Van':/jeep|suv/i.test(vt)?'7-Seater Jeep / SUV':'Car (Sedan)');
+ const rows=[['Guests',guests],['Duration',nn+' Nights / '+g('numDays')+' Days']];
+ if(nn>0){rows.push(['Accommodation',acc]);rows.push(['Hotels & Meals','Selected '+cats.join(' / ')+' | '+meals.join(' / ')])}
+ rows.push(['Transportation',veh]);rows.push(['Guide',g('guideType')]);return rows}
+function getSaved(){return mem}
+async function saveLogo(){if(dbCol){try{await dbCol.doc('settings').set({logo:logo||null,company:company||{},terms:tc||null});return true}catch(e){toast('Could not save logo to the database');return false}}
+ try{localStorage.setItem(KEY+'_logo',JSON.stringify(logo))}catch(e){}return true}
+function applyLogo(){const i=$('logoImg'),ic=$('logoIcon');if(logo&&logo.data){i.src=logo.data;i.classList.remove('hidden');ic.classList.add('hidden');$('logoDel').classList.remove('hidden')}else{i.classList.add('hidden');ic.classList.remove('hidden');$('logoDel').classList.add('hidden')}}
+function removeLogo(){logo=null;applyLogo();saveLogo();toast('Logo removed')}
+function onLogoFile(e){const f=e.target.files[0];e.target.value='';if(!f)return;const rd=new FileReader();
+ rd.onload=()=>{const im=new Image();im.onerror=()=>toast('Could not read that image file');
+  im.onload=async()=>{const iw=im.naturalWidth||400,ih=im.naturalHeight||200,sc=Math.min(1,400/iw,200/ih),w=Math.max(1,Math.round(iw*sc)),h=Math.max(1,Math.round(ih*sc));
+   const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.drawImage(im,0,0,w,h);let d=c.toDataURL('image/png');
+   if(d.length>180000){x.globalCompositeOperation='destination-over';x.fillStyle='#fff';x.fillRect(0,0,w,h);d=c.toDataURL('image/jpeg',.85)}
+   logo={data:d,w,h};applyLogo();const ok=await saveLogo();if(ok)toast('Logo saved and will appear on every quotation PDF')};
+  im.src=rd.result};rd.readAsDataURL(f)}
+async function sync(id,rec){
+ if(dbCol){try{const d=dbCol.doc('q_'+id);rec?await d.set(rec):await d.delete();return true}catch(e){toast('Could not update the database');return false}}
+ try{localStorage.setItem(KEY,JSON.stringify(mem))}catch(e){}return true}
+async function storeSave(rec){mem=[rec,...mem.filter(q=>q.id!==rec.id)];return sync(rec.id,rec)}
+async function storeDelete(id){mem=mem.filter(q=>q.id!==id);return sync(id,null)}
+async function storeClear(){const ids=mem.map(q=>q.id);mem=[];for(const i of ids)await sync(i,null)}
+let vconf={},ready=false;
+function makeRecord(){calc();const rec={id:$('qno').value,savedAt:new Date().toISOString(),others:JSON.parse(JSON.stringify(others)),nights:JSON.stringify(nightsState()),itin:JSON.stringify(itin||null),tcForm:JSON.stringify(readTC()),vconf:JSON.stringify(vconf),finLKR:$('finLKR').textContent,finUSD:$('finUSD').textContent,finLKRn:Math.round(LC.fin||0),finUSDn:Math.round((LC.usd||0)*100)/100};
+ FIELDS.forEach(f=>rec[f]=$(f).value);return rec}
+function applyRecord(r){$('qno').value=r.id;FIELDS.forEach(f=>{if(r[f]!==undefined)$(f).value=r[f]});others=JSON.parse(JSON.stringify(r.others||[]));renderOthers();
+ try{itin=r.itin?JSON.parse(r.itin):null}catch(e){itin=null}try{vconf=r.vconf?JSON.parse(r.vconf):{}}catch(e){vconf={}}
+ if(r.tcForm){try{const t=JSON.parse(r.tcForm);$('tcDep').value=t.dep;$('tcValid').value=t.valid;$('tcIncl').value=t.incl;$('tcExcl').value=t.excl;$('tcTerms').value=t.terms;$('tcThanks').value=t.thanks}catch(e){}}
+ let nd=r.nights;if(typeof nd==='string'){try{nd=JSON.parse(nd)}catch(e){nd=undefined}}buildNights(Math.max(0,parseInt(r.numDays)-1),nd);calc()}
+async function saveQuote(){const rec=makeRecord();const ok=await storeSave(rec);badge();if(ok)toast(`Quotation ${rec.id} saved as a separate entry`)}
+function restore(id){const r=getSaved().find(q=>q.id===id);if(!r)return;applyRecord(r);toggleModal();toast('Loaded Quotation '+r.id)}
+let draftT=null;
+function draftSoon(){if(!ready)return;clearTimeout(draftT);draftT=setTimeout(saveDraft,1200)}
+async function saveDraft(){try{const rec=makeRecord();if(dbCol)await dbCol.doc('draft').set(rec);else localStorage.setItem(KEY+'_draft',JSON.stringify(rec))}catch(e){}}
+async function loadDraft(){try{let r=null;if(dbCol){const s=await dbCol.doc('draft').get();if(s.exists)r=s.data()}else r=JSON.parse(localStorage.getItem(KEY+'_draft'));if(r&&r.id)applyRecord(r)}catch(e){}}
+document.addEventListener('input',draftSoon);document.addEventListener('change',draftSoon);
+let pend=null,pendAll=false;
+function delQuote(id){if(pend!==id){pend=id;renderSaved();toast('Click again to confirm delete');setTimeout(()=>{if(pend===id){pend=null;renderSaved()}},4000);return}pend=null;storeDelete(id).then(()=>{renderSaved();badge();toast('Quotation deleted.')});return}
+function clearSaved(){const b=$('clearBtn');if(!pendAll){pendAll=true;b.textContent='Click again to confirm';setTimeout(()=>{pendAll=false;b.textContent='Clear History'},4000);return}pendAll=false;b.textContent='Clear History';storeClear().then(()=>{renderSaved();badge();toast('Saved history cleared.')})}
+function badge(){$('badge').textContent=getSaved().length}
+function toggleModal(){const m=$('modal');m.classList.toggle('hidden');m.classList.toggle('flex');if(!m.classList.contains('hidden'))renderSaved()}
+function renderSaved(){const s=($('search').value||'').toLowerCase(),all=getSaved();
+ const list=all.filter(q=>[q.id,q.custName,q.custCountry,q.custEmail].some(v=>(v||'').toLowerCase().includes(s)));
+ $('savedBody').innerHTML=list.length?list.map(q=>`<tr class="border-t border-slate-800"><td class="p-2 font-mono text-sky-400 font-bold">${esc(q.id)}</td><td class="text-slate-400">${new Date(q.savedAt).toLocaleDateString()}</td><td><b>${esc(q.custName||'Guest')}</b><div class="text-[10px] text-slate-400">${esc(q.custCountry||'')}</div></td><td>${q.numDays} Days / ${q.numDays-1} Nights</td><td class="text-right font-bold">${q.finLKR}</td><td class="text-right font-bold text-teal-300">${q.finUSD}</td><td class="text-center whitespace-nowrap"><button class="btn !bg-sky-700" onclick="restore('${q.id}')">Load</button> <button class="${pend===q.id?'btn !bg-rose-700 !text-white':'text-rose-400 px-1'}" onclick="delQuote('${q.id}')">${pend===q.id?'Sure?':'&times;'}</button></td></tr>`).join(''):`<tr><td colspan="7" class="p-6 text-center text-slate-500 italic">${all.length?'No matching records found.':'No saved quotations found.'}</td></tr>`}
+
+function genId(){const d=new Date();$('qno').value=`QT-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}-${Math.floor(1000+Math.random()*9000)}`}
+function loadDemo(){const v={custName:"Mr. David Alexander",custEmail:"david.alexander@traveluk.com",custPhone:"+44 7911 123456",custCountry:"United Kingdom",travelDate:"2026-11-15",custNotes:"Requires sea view rooms & English chauffeur guide.",paxAdults:"2",paxChild12:"1",paxChild5:"0",numDays:"6",fuelKm:"980"};
+ Object.entries(v).forEach(([k,x])=>$(k).value=x);daysChange();toast('Demo tour itinerary loaded!')}
+function resetForm(){draftSoon();itin=null;vconf={};['custName','custEmail','custPhone','custCountry','custNotes'].forEach(f=>$(f).value='');$('numDays').value=5;daysChange();genId();toast('Form reset to defaults.')}
+function toast(m){const t=document.createElement('div');t.className='fixed bottom-5 right-5 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl z-50 text-xs font-bold';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2800)}
+
+window.addEventListener('DOMContentLoaded',()=>{
+ const dl=document.createElement('datalist');dl.id='hotels';dl.innerHTML=HOTELS.map(h=>`<option value="${esc(h)}">`).join('');document.body.appendChild(dl);
+ $('paxAdults').innerHTML=[1,2,3,4,5,6,8,10].map(n=>`<option value="${n}" ${n===2?'selected':''}>${n}${n===10?'+':''} Adult${n>1?'s':''}</option>`).join('');
+ $('paxChild12').innerHTML=[0,1,2,3].map(n=>`<option value="${n}">${n} Child${n===1?'':'ren'}</option>`).join('');
+ $('paxChild5').innerHTML=[0,1,2].map(n=>`<option value="${n}">${n} Child${n===1?'':'ren'}</option>`).join('');
+ genId();buildNights(4,[]);renderOthers();loadTCForm();calc();initStore().then(async()=>{if(!company||!Object.keys(company).length)company={...DEF_CO};badge();applyLogo();loadTCForm();await loadDraft();tcPreview();ready=true});
+});
+</script>
+</body>
+</html>
