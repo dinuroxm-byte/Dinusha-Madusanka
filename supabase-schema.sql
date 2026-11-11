@@ -45,7 +45,7 @@ create policy "Admins can update user profiles"
 
 create policy "Admins can delete user profiles"
   on public.profiles for delete
-  using (public.is_admin());
+  using (public.is_admin() and auth.uid() != id);
 
 -- Auto-create profile trigger on auth signup
 create or replace function public.handle_new_user()
@@ -303,6 +303,54 @@ begin
   return jsonb_build_object('success', true, 'user_id', new_uid);
 end;
 $$;
+
+create or replace function public.admin_delete_staff_user(
+  target_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  target_role text;
+  target_email text;
+begin
+  -- 1. Ensure executing user is an administrator
+  if not public.is_admin() then
+    raise exception 'Unauthorized: Only administrators can delete staff accounts.';
+  end if;
+
+  -- 2. Staff and admins cannot delete their own accounts
+  if auth.uid() = target_user_id then
+    raise exception 'Operation forbidden: You cannot delete your own account.';
+  end if;
+
+  -- 3. Verify target user exists and get their role & email
+  select role, email into target_role, target_email
+  from public.profiles
+  where id = target_user_id;
+
+  if target_role is null then
+    raise exception 'User not found in profiles.';
+  end if;
+
+  if target_role = 'ADMIN' then
+    raise exception 'Permission denied: Administrator accounts cannot be deleted through staff management.';
+  end if;
+
+  -- 4. Delete target user from public.profiles and auth.users
+  delete from public.profiles where id = target_user_id;
+  delete from auth.users where id = target_user_id;
+
+  return jsonb_build_object(
+    'success', true,
+    'message', format('Staff account (%s) deleted successfully.', target_email)
+  );
+end;
+$$;
+
+grant execute on function public.admin_create_staff_user(text, text, text, text) to authenticated;
+grant execute on function public.admin_delete_staff_user(uuid) to authenticated;
 
 -- ============================================================================
 -- 7. User Activity & Audit Logs Table (Tamper-Proof & Append-Only)

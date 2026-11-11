@@ -8,7 +8,9 @@ import {
   Plus,
   RefreshCw,
   Shield,
+  ShieldAlert,
   ShieldCheck,
+  Trash2,
   User,
   UserCheck,
   UserPlus,
@@ -16,7 +18,12 @@ import {
   X
 } from 'lucide-react';
 import { UserProfile, UserRole } from '../types';
-import { adminCreateStaffAccount, fetchAllStaffProfiles, logActivity } from '../utils/supabaseStorage';
+import {
+  adminCreateStaffAccount,
+  adminDeleteStaffAccount,
+  fetchAllStaffProfiles,
+  logActivity
+} from '../utils/supabaseStorage';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -44,6 +51,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [formSuccess, setFormSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Staff account deletion state
+  const [deletingUser, setDeletingUser] = useState<UserProfile | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const loadUsers = async () => {
     setIsLoading(true);
     try {
@@ -60,6 +71,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     if (isOpen) {
       loadUsers();
       setIsAddingNew(false);
+      setDeletingUser(null);
       setFormError('');
       setFormSuccess('');
     }
@@ -123,6 +135,66 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setFormError(err.message || 'Could not create staff account.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteStaff = async () => {
+    if (!deletingUser) return;
+
+    // Rule 1: Only administrators can delete staff accounts
+    if (currentUser?.role !== 'ADMIN') {
+      showToast('Unauthorized: Only administrators can delete staff accounts.');
+      setDeletingUser(null);
+      return;
+    }
+
+    // Rule 2: Staff and admins cannot delete their own accounts
+    if (currentUser.id === deletingUser.id) {
+      showToast('Operation forbidden: You cannot delete your own account.');
+      setDeletingUser(null);
+      return;
+    }
+
+    // Rule 3: Protected admin accounts
+    if (deletingUser.role === 'ADMIN') {
+      showToast('Permission denied: Administrator accounts cannot be deleted.');
+      setDeletingUser(null);
+      return;
+    }
+
+    setIsDeleting(true);
+    setFormError('');
+    setFormSuccess('');
+
+    try {
+      const res = await adminDeleteStaffAccount(deletingUser.id, currentUser);
+      if (res.success) {
+        logActivity({
+          action: 'DELETE_STAFF',
+          entity_type: 'user',
+          entity_id: deletingUser.email,
+          summary: `Administrator deleted staff account for "${deletingUser.fullName}" (${deletingUser.email})`,
+          details: {
+            user_id: deletingUser.id,
+            email: deletingUser.email,
+            full_name: deletingUser.fullName,
+            role: deletingUser.role
+          },
+          user: currentUser
+        });
+
+        showToast(`Staff account for "${deletingUser.fullName}" has been deleted.`);
+        setFormSuccess(`Staff account for "${deletingUser.fullName}" deleted successfully.`);
+        setDeletingUser(null);
+        await loadUsers();
+      } else {
+        setFormError(res.message);
+        showToast(res.message);
+      }
+    } catch (err: any) {
+      setFormError(err.message || 'Could not delete staff account.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -299,10 +371,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             ) : (
               usersList.map(u => {
                 const isCurrent = currentUser?.id === u.id;
+                const isStaff = u.role === 'STAFF';
+                const isAdmin = currentUser?.role === 'ADMIN';
+                const canDelete = isAdmin && isStaff && !isCurrent;
+
                 return (
                   <div
                     key={u.id}
-                    className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between gap-3"
+                    className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between gap-3 hover:border-slate-700 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 shrink-0">
@@ -335,6 +411,25 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       >
                         {u.role}
                       </span>
+
+                      {/* Delete Staff Action Button (Admin-only; staff cannot delete their own account) */}
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingUser(u)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-900/50 transition-colors cursor-pointer"
+                          title={`Delete staff account for ${u.fullName}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : isCurrent ? (
+                        <span
+                          className="text-[10px] text-slate-500 font-medium px-1.5 py-0.5"
+                          title="Staff cannot delete their own accounts"
+                        >
+                          Self
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -345,8 +440,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           {/* Security & RLS Policy Summary */}
           <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-3 text-[11px] text-slate-400 space-y-1">
             <b className="text-slate-300 block">Supabase Row Level Security (RLS) Rules:</b>
-            <div>• <b className="text-amber-300">ADMIN</b>: Full CRUD on all quotations, customers, company profile, and user accounts.</div>
+            <div>• <b className="text-amber-300">ADMIN</b>: Full CRUD on all quotations, customers, company profile, and user accounts. Can delete staff accounts.</div>
             <div>• <b className="text-sky-300">STAFF</b>: Permitted to create/update quotations, manage hotels, and view CRM customers. Blocked from deleting records or altering company profile/terms.</div>
+            <div>• <b className="text-rose-400">RESTRICTION</b>: Staff cannot delete their own accounts or any other user accounts. Administrators cannot delete their own active account.</div>
           </div>
         </div>
 
@@ -360,6 +456,62 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             Close
           </button>
         </div>
+
+        {/* Delete Staff Confirmation Dialog */}
+        {deletingUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-slate-900 border border-rose-900/80 rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-950/80 border border-rose-700/80 flex items-center justify-center text-rose-400 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-100">Delete Staff Account</h4>
+                  <p className="text-xs text-rose-300">This action cannot be undone</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Are you sure you want to permanently delete the staff account for{' '}
+                <b className="text-white font-bold">{deletingUser.fullName}</b> ({deletingUser.email})?
+              </p>
+
+              <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-[11px] text-slate-400 space-y-1">
+                <div>• Revokes their login credentials and database access immediately.</div>
+                <div>• Staff cannot delete their own accounts; this action is performed by an Administrator.</div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setDeletingUser(null)}
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleDeleteStaff}
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Staff Account</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

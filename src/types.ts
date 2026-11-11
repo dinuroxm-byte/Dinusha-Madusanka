@@ -397,6 +397,7 @@ export type ActivityAction =
   | 'UPDATE_LOGO'
   | 'REMOVE_LOGO'
   | 'CREATE_STAFF'
+  | 'DELETE_STAFF'
   | 'USER_LOGIN'
   | 'USER_LOGOUT'
   | 'EXPORT_PDF'

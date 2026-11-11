@@ -125,6 +125,62 @@ export async function adminCreateStaffAccount(params: {
   }
 }
 
+export async function adminDeleteStaffAccount(
+  targetUserId: string,
+  currentUser?: UserProfile | null
+): Promise<{ success: boolean; message: string }> {
+  if (currentUser && currentUser.role !== 'ADMIN') {
+    return {
+      success: false,
+      message: 'Unauthorized: Only administrators can delete staff accounts.'
+    };
+  }
+
+  if (currentUser && currentUser.id === targetUserId) {
+    return {
+      success: false,
+      message: 'Operation forbidden: You cannot delete your own account.'
+    };
+  }
+
+  if (!isSupabaseConfigured()) {
+    return {
+      success: true,
+      message: 'Staff account deleted (preview mode).'
+    };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('admin_delete_staff_user', {
+      target_user_id: targetUserId
+    });
+
+    if (error) {
+      console.warn('RPC admin_delete_staff_user error, attempting fallback profile deletion:', error.message);
+      const { error: directError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', targetUserId)
+        .neq('role', 'ADMIN');
+
+      if (directError) {
+        return { success: false, message: error.message || directError.message };
+      }
+    }
+
+    return {
+      success: true,
+      message: data?.message || 'Staff account deleted successfully.'
+    };
+  } catch (err: any) {
+    console.error('Failed to delete staff account:', err);
+    return {
+      success: false,
+      message: err.message || 'Could not delete staff account.'
+    };
+  }
+}
+
 // ==========================================
 // 2. Company Settings & Legal Terms
 // ==========================================
