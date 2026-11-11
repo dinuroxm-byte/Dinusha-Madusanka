@@ -1,6 +1,0 @@
-{
-  "summary":  "Technical implementation plan to upgrade Voya Lanka Tours from localStorage to Supabase cloud database with Role-Based Access Control (ADMIN & STAFF), Row Level Security (RLS), real-time sync, and preservation of all quotation and PDF features.",
-  "updatedAt":  "2026-11-10T17:24:22.761929172Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}

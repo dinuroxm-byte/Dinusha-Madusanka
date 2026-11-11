@@ -10,7 +10,9 @@ import { DatabaseBackupModal } from './components/DatabaseBackupModal';
 import { GuideSection } from './components/GuideSection';
 import { Header } from './components/Header';
 import { ItineraryModal } from './components/ItineraryModal';
+import { LoginPage } from './components/LoginPage';
 import { OnlineProposalView } from './components/OnlineProposalView';
+import { Plane } from 'lucide-react';
 import { PaxSection } from './components/PaxSection';
 import { PricingSidebar } from './components/PricingSidebar';
 import { PrintModal } from './components/PrintModal';
@@ -241,6 +243,7 @@ export default function App() {
 
   // 2. UI Modals & Online View State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>('connected');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
@@ -277,6 +280,9 @@ export default function App() {
         user: currentUser
       });
     }
+    try {
+      localStorage.removeItem('voya_lanka_active_user');
+    } catch (_) {}
     if (isSupabaseConfigured()) {
       await supabase.auth.signOut();
     }
@@ -310,13 +316,18 @@ export default function App() {
   useEffect(() => {
     if (!isSupabaseConfigured()) {
       setSyncStatus('offline');
-      // When Supabase credentials are not set, provide local admin preview
-      setCurrentUser({
-        id: 'local_admin',
-        email: 'admin@voyalankatours.com',
-        fullName: 'Voya Lanka Administrator',
-        role: 'ADMIN'
-      });
+      // When Supabase credentials are not set, check if user logged in previously
+      try {
+        const storedUser = localStorage.getItem('voya_lanka_active_user');
+        if (storedUser) {
+          setCurrentUser(JSON.parse(storedUser));
+        } else {
+          setCurrentUser(null);
+        }
+      } catch (_) {
+        setCurrentUser(null);
+      }
+      setIsCheckingAuth(false);
       return;
     }
 
@@ -324,21 +335,32 @@ export default function App() {
 
     // 1. Initial auth check
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const profile = await fetchUserProfile(session.user.id);
-        setCurrentUser(
-          profile || {
-            id: session.user.id,
-            email: session.user.email || '',
-            fullName: session.user.user_metadata?.full_name || 'Staff Member',
-            role: 'STAFF'
-          }
-        );
-        loadAllDataFromCloud();
-      } else {
+      try {
+        if (session?.user) {
+          const profile = await fetchUserProfile(session.user.id);
+          setCurrentUser(
+            profile || {
+              id: session.user.id,
+              email: session.user.email || '',
+              fullName: session.user.user_metadata?.full_name || 'Staff Member',
+              role: 'STAFF'
+            }
+          );
+          loadAllDataFromCloud();
+        } else {
+          setCurrentUser(null);
+          setSyncStatus('connected');
+        }
+      } catch (err) {
+        console.error('Error checking session:', err);
         setCurrentUser(null);
-        setSyncStatus('connected');
+      } finally {
+        setIsCheckingAuth(false);
       }
+    }).catch(err => {
+      console.error('Failed to get session:', err);
+      setCurrentUser(null);
+      setIsCheckingAuth(false);
     });
 
     // 2. Auth changes listener
@@ -1251,7 +1273,40 @@ export default function App() {
     );
   }
 
-  // If previewing online proposal view from generator
+  // 2. If session is being verified on initial load
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-300 select-none">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-700 to-teal-600 flex items-center justify-center text-white shadow-xl shadow-sky-950/60 mb-4 animate-pulse">
+          <Plane className="w-8 h-8 -rotate-45" />
+        </div>
+        <h2 className="text-lg font-bold text-slate-100">Voya Lanka Tours (Pvt) Ltd.</h2>
+        <p className="text-xs text-amber-400 font-semibold italic tracking-wider mt-0.5">
+          MORE THAN A DESTINATION
+        </p>
+        <div className="flex items-center gap-2 mt-6 text-xs text-slate-400">
+          <span className="w-4 h-4 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
+          <span>Verifying security session...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. If user is not authenticated, show login page and credentials box first!
+  if (!currentUser) {
+    return (
+      <LoginPage
+        logo={logo}
+        onSuccess={user => {
+          setCurrentUser(user);
+          loadAllDataFromCloud();
+        }}
+        showToast={showToast}
+      />
+    );
+  }
+
+  // 4. If previewing online proposal view from generator
   if (isPreviewProposalOpen) {
     return (
       <OnlineProposalView
