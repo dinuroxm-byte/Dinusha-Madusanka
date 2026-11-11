@@ -304,8 +304,46 @@ begin
 end;
 $$;
 
+-- ============================================================================
+-- 7. User Activity & Audit Logs Table (Tamper-Proof & Append-Only)
+-- ============================================================================
+create table if not exists public.activity_logs (
+  id uuid primary key default extensions.uuid_generate_v4(),
+  created_at timestamptz default now() not null,
+  user_id uuid references auth.users(id) on delete set null,
+  user_email text not null,
+  user_name text not null,
+  user_role text not null check (user_role in ('ADMIN', 'STAFF')) default 'STAFF',
+  action text not null,
+  entity_type text not null,
+  entity_id text,
+  summary text not null,
+  details jsonb default '{}'::jsonb
+);
+
+create index if not exists idx_activity_logs_created_at on public.activity_logs (created_at desc);
+create index if not exists idx_activity_logs_entity on public.activity_logs (entity_type, entity_id);
+create index if not exists idx_activity_logs_action on public.activity_logs (action);
+create index if not exists idx_activity_logs_user on public.activity_logs (user_email);
+
+alter table public.activity_logs enable row level security;
+
+-- Authenticated team members can view audit logs
+create policy "Authenticated users can view audit logs"
+  on public.activity_logs for select
+  using (auth.role() = 'authenticated');
+
+-- Authenticated users can insert activity logs
+create policy "Authenticated users can append activity logs"
+  on public.activity_logs for insert
+  with check (auth.role() = 'authenticated');
+
+-- NOTE: No UPDATE or DELETE policies are granted on public.activity_logs,
+-- guaranteeing append-only tamper-proof audit trails for legal and regulatory compliance.
+
 -- Enable Realtime publication for tables
 alter publication supabase_realtime add table public.quotations;
 alter publication supabase_realtime add table public.customers;
 alter publication supabase_realtime add table public.partner_hotels;
 alter publication supabase_realtime add table public.company_settings;
+alter publication supabase_realtime add table public.activity_logs;

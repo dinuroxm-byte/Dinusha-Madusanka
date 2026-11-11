@@ -24,6 +24,7 @@ import {
   loadSavedQuotes,
   restoreFullDatabase
 } from '../utils/storage';
+import { logActivity } from '../utils/supabaseStorage';
 
 interface DatabaseBackupModalProps {
   isOpen: boolean;
@@ -61,6 +62,17 @@ export const DatabaseBackupModal: React.FC<DatabaseBackupModalProps> = ({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      logActivity({
+        action: 'BACKUP_DOWNLOAD',
+        entity_type: 'system',
+        summary: `Downloaded complete JSON database snapshot (${backup.savedQuotes?.length || 0} quotes, ${backup.customers?.length || 0} customers)`,
+        details: {
+          quotes_count: backup.savedQuotes?.length || 0,
+          customers_count: backup.customers?.length || 0,
+          hotels_count: backup.partnerHotels?.length || 0
+        }
+      });
+
       showToast('Database backup downloaded successfully.');
     } catch (err) {
       console.error('Export error:', err);
@@ -105,6 +117,17 @@ export const DatabaseBackupModal: React.FC<DatabaseBackupModalProps> = ({
     try {
       const success = restoreFullDatabase(pendingBackupData);
       if (success) {
+        logActivity({
+          action: 'RESTORE_DATABASE',
+          entity_type: 'system',
+          summary: `Restored database backup from "${pendingFileName || 'backup.json'}" (${pendingBackupData.customers?.length || 0} customers, ${pendingBackupData.savedQuotes?.length || 0} quotations)`,
+          details: {
+            filename: pendingFileName,
+            quotes_count: pendingBackupData.savedQuotes?.length || 0,
+            customers_count: pendingBackupData.customers?.length || 0
+          }
+        });
+
         showToast(
           `Database restored successfully! (${pendingBackupData.customers?.length || 0} customers, ${pendingBackupData.savedQuotes?.length || 0} quotations)`
         );

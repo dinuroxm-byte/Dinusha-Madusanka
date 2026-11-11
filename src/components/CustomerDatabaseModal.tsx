@@ -26,6 +26,7 @@ import {
 import {
   deleteCustomerFromCloud,
   fetchCustomers,
+  logActivity,
   saveCustomerToCloud
 } from '../utils/supabaseStorage';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -138,6 +139,22 @@ export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
         }
       }
       saveSingleCustomer(updated);
+
+      logActivity({
+        action: 'UPDATE_CUSTOMER',
+        entity_type: 'customer',
+        entity_id: updated.id,
+        summary: `Updated CRM profile for "${trimmedName}" (${country.trim() || 'No country'})`,
+        details: {
+          customer_id: updated.id,
+          name: trimmedName,
+          email: email.trim(),
+          phone: phone.trim(),
+          country: country.trim()
+        },
+        user: currentUser
+      });
+
       showToast(`Updated profile for "${trimmedName}".`);
       resetForm();
       refreshList();
@@ -163,6 +180,22 @@ export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
         }
       }
       saveSingleCustomer(newCust);
+
+      logActivity({
+        action: 'CREATE_CUSTOMER',
+        entity_type: 'customer',
+        entity_id: newCust.id,
+        summary: `Created new customer profile for "${trimmedName}" in CRM directory`,
+        details: {
+          customer_id: newCust.id,
+          name: trimmedName,
+          email: email.trim(),
+          phone: phone.trim(),
+          country: country.trim()
+        },
+        user: currentUser
+      });
+
       showToast(`Added "${trimmedName}" to Customer Database.`);
       resetForm();
       refreshList();
@@ -181,6 +214,20 @@ export const CustomerDatabaseModal: React.FC<CustomerDatabaseModalProps> = ({
     }
     deleteCustomer(deletingCustomer.id);
     if (editingId === deletingCustomer.id) resetForm();
+
+    logActivity({
+      action: 'DELETE_CUSTOMER',
+      entity_type: 'customer',
+      entity_id: deletingCustomer.id,
+      summary: `Removed customer "${deletingCustomer.name}" from CRM directory`,
+      details: {
+        customer_id: deletingCustomer.id,
+        name: deletingCustomer.name,
+        email: deletingCustomer.email
+      },
+      user: currentUser
+    });
+
     showToast(`Removed "${deletingCustomer.name}" from customer records.`);
     setDeletingCustomer(null);
     refreshList();

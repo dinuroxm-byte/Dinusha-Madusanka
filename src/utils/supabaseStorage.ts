@@ -1,5 +1,8 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import {
+  ActivityAction,
+  ActivityEntityType,
+  ActivityLog,
   CompanyDetails,
   CustomerDetails,
   CustomerRecord,
@@ -819,6 +822,7 @@ export function subscribeToCloudChanges(callbacks: {
   onCustomersChange?: () => void;
   onHotelsChange?: () => void;
   onCompanySettingsChange?: () => void;
+  onActivityLogsChange?: () => void;
 }) {
   if (!isSupabaseConfigured()) return () => {};
 
@@ -852,9 +856,164 @@ export function subscribeToCloudChanges(callbacks: {
         callbacks.onCompanySettingsChange?.();
       }
     )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'activity_logs' },
+      () => {
+        callbacks.onActivityLogsChange?.();
+      }
+    )
     .subscribe();
 
   return () => {
     supabase.removeChannel(channel);
   };
 }
+
+// ==========================================
+// 9. User Activity & Audit Logs
+// ==========================================
+
+const LOCAL_ACTIVITY_LOGS_KEY = 'voya_lanka_activity_logs_v1';
+
+export function loadLocalActivityLogs(): ActivityLog[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_ACTIVITY_LOGS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalActivityLogs(logs: ActivityLog[]): void {
+  try {
+    localStorage.setItem(LOCAL_ACTIVITY_LOGS_KEY, JSON.stringify(logs.slice(0, 200)));
+  } catch (err) {
+    console.warn('Failed to save activity logs locally:', err);
+  }
+}
+
+export async function logActivity(params: {
+  action: ActivityAction;
+  entity_type: ActivityEntityType;
+  entity_id?: string | null;
+  summary: string;
+  details?: Record<string, any>;
+  user?: UserProfile | null;
+}): Promise<void> {
+  const timestamp = new Date().toISOString();
+  const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  let userEmail = params.user?.email || 'admin@voyalankatours.com';
+  let userName = params.user?.fullName || 'Voya Lanka Admin';
+  let userRole = params.user?.role || 'ADMIN';
+  let userId = params.user?.id || null;
+
+  if (!params.user && isSupabaseConfigured()) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        userId = session.user.id;
+        userEmail = session.user.email || userEmail;
+        userName = session.user.user_metadata?.full_name || userEmail.split('@')[0];
+        userRole = (session.user.user_metadata?.role as UserRole) || 'STAFF';
+      }
+    } catch (_) {}
+  }
+
+  const logEntry: ActivityLog = {
+    id: logId,
+    created_at: timestamp,
+    user_id: userId,
+    user_email: userEmail,
+    user_name: userName,
+    user_role: userRole,
+    action: params.action,
+    entity_type: params.entity_type,
+    entity_id: params.entity_id || null,
+    summary: params.summary,
+    details: params.details || {}
+  };
+
+  // 1. Immediately cache locally
+  try {
+    const currentLogs = loadLocalActivityLogs();
+    const updated = [logEntry, ...currentLogs];
+    saveLocalActivityLogs(updated);
+  } catch (_) {}
+
+  // 2. Dispatch custom in-app event for immediate reactive UI update
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('voya_activity_logged', { detail: logEntry }));
+  }
+
+  // 3. Persist to Supabase if configured (tamper-proof cloud audit log)
+  if (isSupabaseConfigured()) {
+    try {
+      const { error } = await supabase.from('activity_logs').insert({
+        user_id: userId,
+        user_email: userEmail,
+        user_name: userName,
+        user_role: userRole,
+        action: params.action,
+        entity_type: params.entity_type,
+        entity_id: params.entity_id || null,
+        summary: params.summary,
+        details: params.details || {}
+      });
+
+      if (error) {
+        console.warn('Could not persist activity log to Supabase:', error.message);
+      }
+    } catch (err) {
+      console.warn('Network exception while logging activity to cloud:', err);
+    }
+  }
+}
+
+export async function fetchActivityLogs(limit = 100): Promise<ActivityLog[]> {
+  const localLogs = loadLocalActivityLogs();
+
+  if (!isSupabaseConfigured()) {
+    return localLogs;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('activity_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.warn('Could not fetch cloud activity logs, using local cache:', error.message);
+      return localLogs;
+    }
+
+    if (!data || data.length === 0) {
+      return localLogs;
+    }
+
+    const cloudLogs: ActivityLog[] = data.map((d: any) => ({
+      id: d.id,
+      created_at: d.created_at,
+      user_id: d.user_id,
+      user_email: d.user_email,
+      user_name: d.user_name,
+      user_role: d.user_role as UserRole,
+      action: d.action as ActivityAction,
+      entity_type: d.entity_type as ActivityEntityType,
+      entity_id: d.entity_id,
+      summary: d.summary,
+      details: d.details || {}
+    }));
+
+    saveLocalActivityLogs(cloudLogs);
+    return cloudLogs;
+  } catch (err) {
+    console.warn('Exception fetching activity logs:', err);
+    return localLogs;
+  }
+}
+

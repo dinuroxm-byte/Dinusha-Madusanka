@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccommodationSection } from './components/AccommodationSection';
+import { ActivityLogsModal } from './components/ActivityLogsModal';
 import { AuthModal } from './components/AuthModal';
 import { ChargesSection } from './components/ChargesSection';
 import { CompanyModal } from './components/CompanyModal';
@@ -50,6 +51,7 @@ import {
   fetchCustomers,
   fetchQuotations,
   fetchUserProfile,
+  logActivity,
   saveQuotationToCloud,
   saveUserDraftToCloud,
   subscribeToCloudChanges,
@@ -242,6 +244,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>('connected');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
+  const [isActivityLogsOpen, setIsActivityLogsOpen] = useState(false);
 
   const [isSavedModalOpen, setIsSavedModalOpen] = useState(false);
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
@@ -265,6 +268,15 @@ export default function App() {
   }, []);
 
   const handleSignOut = async () => {
+    if (currentUser) {
+      logActivity({
+        action: 'USER_LOGOUT',
+        entity_type: 'user',
+        entity_id: currentUser.id,
+        summary: `${currentUser.fullName || currentUser.email} signed out of company workspace`,
+        user: currentUser
+      });
+    }
     if (isSupabaseConfigured()) {
       await supabase.auth.signOut();
     }
@@ -335,14 +347,24 @@ export default function App() {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         const profile = await fetchUserProfile(session.user.id);
-        setCurrentUser(
-          profile || {
-            id: session.user.id,
-            email: session.user.email || '',
-            fullName: session.user.user_metadata?.full_name || 'Staff Member',
-            role: 'STAFF'
-          }
-        );
+        const resolvedUser: UserProfile = profile || {
+          id: session.user.id,
+          email: session.user.email || '',
+          fullName: session.user.user_metadata?.full_name || 'Staff Member',
+          role: 'STAFF'
+        };
+        setCurrentUser(resolvedUser);
+
+        if (event === 'SIGNED_IN') {
+          logActivity({
+            action: 'USER_LOGIN',
+            entity_type: 'user',
+            entity_id: session.user.id,
+            summary: `${resolvedUser.fullName} (${resolvedUser.email}) signed in`,
+            user: resolvedUser
+          });
+        }
+
         loadAllDataFromCloud();
       } else {
         setCurrentUser(null);
@@ -814,6 +836,7 @@ export default function App() {
 
   // Handler: Save Quotation Record
   const handleSaveQuote = async () => {
+    const isExisting = savedQuotes.some(q => q.id === customer.qno);
     const record: SavedQuotation = {
       id: customer.qno,
       savedAt: new Date().toISOString(),
@@ -851,6 +874,28 @@ export default function App() {
     setCustomers(loadCustomers());
     setSyncStatus('connected');
 
+    // Audit Logging
+    logActivity({
+      action: isExisting ? 'UPDATE_QUOTATION' : 'CREATE_QUOTATION',
+      entity_type: 'quotation',
+      entity_id: record.id,
+      summary: `${isExisting ? 'Updated' : 'Created'} quotation ${record.id} for "${record.customer.custName || 'Valued Guest'}" (${record.pax.adults} Adults, ${record.nights.length} Nights - ${record.finUSD} / ${record.finLKR})`,
+      details: {
+        quotation_id: record.id,
+        customer_name: record.customer.custName,
+        customer_email: record.customer.custEmail,
+        customer_country: record.customer.custCountry,
+        travel_date: record.customer.travelDate,
+        adults: record.pax.adults,
+        children: record.pax.child12 + record.pax.child5,
+        nights_count: record.nights.length,
+        total_usd: record.finUSD,
+        total_lkr: record.finLKR,
+        vehicle_type: record.transport.vehicleType
+      },
+      user: currentUser
+    });
+
     showToast(`Quotation ${record.id} saved to cloud repository!`);
   };
 
@@ -862,6 +907,22 @@ export default function App() {
     }
     upsertCustomerFromQuote(customer, customer.qno);
     setCustomers(loadCustomers());
+
+    logActivity({
+      action: 'CREATE_CUSTOMER',
+      entity_type: 'customer',
+      entity_id: customer.custEmail || customer.custPhone || customer.qno,
+      summary: `Saved customer "${customer.custName.trim()}" to CRM directory`,
+      details: {
+        customer_name: customer.custName,
+        email: customer.custEmail,
+        phone: customer.custPhone,
+        country: customer.custCountry,
+        source_quote: customer.qno
+      },
+      user: currentUser
+    });
+
     showToast(`Customer "${customer.custName.trim()}" saved to CRM Database!`);
   };
 
@@ -901,6 +962,16 @@ export default function App() {
     const updated = deleteSavedQuote(id);
     setSavedQuotes(updated);
     setSyncStatus('connected');
+
+    logActivity({
+      action: 'DELETE_QUOTATION',
+      entity_type: 'quotation',
+      entity_id: id,
+      summary: `Deleted quotation record ${id}`,
+      details: { quotation_id: id },
+      user: currentUser
+    });
+
     showToast('Quotation deleted.');
   };
 
@@ -919,6 +990,14 @@ export default function App() {
     clearAllSavedQuotes();
     setSavedQuotes([]);
     setSyncStatus('connected');
+
+    logActivity({
+      action: 'CLEAR_QUOTATIONS',
+      entity_type: 'quotation',
+      summary: 'Admin cleared all saved quotation records history',
+      user: currentUser
+    });
+
     showToast('Saved history cleared.');
   };
 
@@ -963,6 +1042,16 @@ export default function App() {
       const blob = generateQuotationPDF(exportData);
       const filename = `Voya_Lanka_Quotation_${customer.qno || 'Draft'}.pdf`;
       downloadBlob(blob, filename);
+
+      logActivity({
+        action: 'EXPORT_PDF',
+        entity_type: 'export',
+        entity_id: customer.qno,
+        summary: `Exported quotation PDF for ${customer.qno || 'Draft'} (${customer.custName || 'Valued Guest'})`,
+        details: { quotation_id: customer.qno, filename, customer: customer.custName },
+        user: currentUser
+      });
+
       showToast(`Quotation PDF saved: ${filename}`);
     } catch (err) {
       console.error('PDF generation error:', err);
@@ -995,6 +1084,16 @@ export default function App() {
       );
       const filename = `Voya_Lanka_Quotation_${customer.qno || 'Draft'}.xlsx`;
       downloadBlob(blob, filename);
+
+      logActivity({
+        action: 'EXPORT_EXCEL',
+        entity_type: 'export',
+        entity_id: customer.qno,
+        summary: `Exported multi-sheet Excel workbook for ${customer.qno || 'Draft'}`,
+        details: { quotation_id: customer.qno, filename },
+        user: currentUser
+      });
+
       showToast(`Excel workbook saved: ${filename}`);
     } catch (err) {
       console.error('Excel export error:', err);
@@ -1043,6 +1142,20 @@ export default function App() {
 
       setIsVoucherModalOpen(false);
 
+      logActivity({
+        action: 'EXPORT_VOUCHER',
+        entity_type: 'export',
+        entity_id: customer.qno,
+        summary: `Generated room voucher for "${hotelRaw}" (Nights: ${nightNumbers.join(', ')} - Confirmed by: ${confirmedBy})`,
+        details: {
+          hotel: hotelRaw,
+          nights: nightNumbers,
+          confirmed_by: confirmedBy,
+          quotation_id: customer.qno
+        },
+        user: currentUser
+      });
+
       const toastMsg =
         nightNumbers.length > 1
           ? `Consolidated Voucher (${nightNumbers.length} Nights) downloaded: ${filename}`
@@ -1075,6 +1188,16 @@ export default function App() {
       const blob = generateItineraryPDF(itinerary, exportData);
       const filename = `Voya_Lanka_Itinerary_${customer.qno || 'Draft'}.pdf`;
       downloadBlob(blob, filename);
+
+      logActivity({
+        action: 'EXPORT_PDF',
+        entity_type: 'export',
+        entity_id: customer.qno,
+        summary: `Exported tour itinerary PDF for ${customer.qno || 'Draft'} (${itinerary.days.length} days)`,
+        details: { quotation_id: customer.qno, days_count: itinerary.days.length, filename },
+        user: currentUser
+      });
+
       showToast('Tour Itinerary PDF saved!');
     } catch (err) {
       console.error('Itinerary PDF error:', err);
@@ -1151,6 +1274,7 @@ export default function App() {
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onSignOut={handleSignOut}
         onOpenUserManagement={() => setIsUserManagementOpen(true)}
+        onOpenActivityLogs={() => setIsActivityLogsOpen(true)}
         onOpenItinerary={() => setIsItineraryModalOpen(true)}
         onOpenSaved={() => setIsSavedModalOpen(true)}
         onOpenCustomers={() => setIsCustomerDbModalOpen(true)}
@@ -1169,6 +1293,12 @@ export default function App() {
           if (isSupabaseConfigured()) {
             await updateCompanySettings(company, newLogo, terms);
           }
+          logActivity({
+            action: 'UPDATE_LOGO',
+            entity_type: 'company',
+            summary: 'Updated official company logo header asset',
+            user: currentUser
+          });
           showToast('Company logo updated and saved!');
         }}
         onLogoRemove={async () => {
@@ -1177,6 +1307,12 @@ export default function App() {
           if (isSupabaseConfigured()) {
             await updateCompanySettings(company, null, terms);
           }
+          logActivity({
+            action: 'REMOVE_LOGO',
+            entity_type: 'company',
+            summary: 'Removed company logo header asset',
+            user: currentUser
+          });
           showToast('Logo removed.');
         }}
       />
@@ -1331,6 +1467,18 @@ export default function App() {
           if (isSupabaseConfigured()) {
             await updateCompanySettings(updatedCo, logo, terms);
           }
+          logActivity({
+            action: 'UPDATE_COMPANY',
+            entity_type: 'company',
+            summary: `Updated company profile details for "${updatedCo.name || 'Voya Lanka Tours'}"`,
+            details: {
+              company_name: updatedCo.name,
+              phone: updatedCo.phone,
+              email: updatedCo.email,
+              reg_no: updatedCo.reg
+            },
+            user: currentUser
+          });
           showToast('Company details saved to database!');
         }}
       />
@@ -1348,6 +1496,13 @@ export default function App() {
         isOpen={isUserManagementOpen}
         currentUser={currentUser}
         onClose={() => setIsUserManagementOpen(false)}
+        showToast={showToast}
+      />
+
+      <ActivityLogsModal
+        isOpen={isActivityLogsOpen}
+        onClose={() => setIsActivityLogsOpen(false)}
+        currentUser={currentUser}
         showToast={showToast}
       />
 

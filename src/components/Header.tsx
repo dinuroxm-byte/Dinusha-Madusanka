@@ -17,6 +17,7 @@ import {
   Share2,
   ShieldCheck,
   Sparkles,
+  History,
   Trash2,
   User,
   Users,
@@ -34,6 +35,7 @@ interface HeaderProps {
   onOpenAuth: () => void;
   onSignOut: () => void;
   onOpenUserManagement: () => void;
+  onOpenActivityLogs: () => void;
   onOpenItinerary: () => void;
   onOpenSaved: () => void;
   onOpenCustomers: () => void;
@@ -59,6 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
   onSignOut,
   onOpenUserManagement,
+  onOpenActivityLogs,
   onOpenItinerary,
   onOpenSaved,
   onOpenCustomers,
@@ -252,6 +255,15 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Database className="w-3.5 h-3.5 text-sky-400" />
               <span>Backup &amp; Restore</span>
+            </button>
+
+            <button
+              onClick={onOpenActivityLogs}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-500/80 bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 transition-colors cursor-pointer"
+              title="User Activity & Audit Logs"
+            >
+              <History className="w-3.5 h-3.5 text-amber-400" />
+              <span>Audit Logs</span>
             </button>
 
             <button

@@ -16,7 +16,7 @@ import {
   X
 } from 'lucide-react';
 import { UserProfile, UserRole } from '../types';
-import { adminCreateStaffAccount, fetchAllStaffProfiles } from '../utils/supabaseStorage';
+import { adminCreateStaffAccount, fetchAllStaffProfiles, logActivity } from '../utils/supabaseStorage';
 
 interface UserManagementModalProps {
   isOpen: boolean;
@@ -95,6 +95,19 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       });
 
       if (res.success) {
+        logActivity({
+          action: 'CREATE_STAFF',
+          entity_type: 'user',
+          entity_id: email.trim().toLowerCase(),
+          summary: `Administrator provisioned new ${role} account for "${fullName.trim()}" (${email.trim().toLowerCase()})`,
+          details: {
+            full_name: fullName.trim(),
+            email: email.trim().toLowerCase(),
+            role
+          },
+          user: currentUser
+        });
+
         showToast(res.message);
         setFormSuccess(res.message);
         setFullName('');

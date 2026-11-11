@@ -381,3 +381,50 @@ export interface UserProfile {
 
 export type CloudSyncStatus = 'connected' | 'syncing' | 'offline' | 'error';
 
+export type ActivityAction =
+  | 'CREATE_QUOTATION'
+  | 'UPDATE_QUOTATION'
+  | 'DELETE_QUOTATION'
+  | 'CLEAR_QUOTATIONS'
+  | 'CREATE_CUSTOMER'
+  | 'UPDATE_CUSTOMER'
+  | 'DELETE_CUSTOMER'
+  | 'ADD_HOTEL'
+  | 'UPDATE_HOTEL'
+  | 'DELETE_HOTEL'
+  | 'RESTORE_HOTELS'
+  | 'UPDATE_COMPANY'
+  | 'UPDATE_LOGO'
+  | 'REMOVE_LOGO'
+  | 'CREATE_STAFF'
+  | 'USER_LOGIN'
+  | 'USER_LOGOUT'
+  | 'EXPORT_PDF'
+  | 'EXPORT_EXCEL'
+  | 'EXPORT_VOUCHER'
+  | 'BACKUP_DOWNLOAD'
+  | 'RESTORE_DATABASE';
+
+export type ActivityEntityType =
+  | 'quotation'
+  | 'customer'
+  | 'hotel'
+  | 'company'
+  | 'user'
+  | 'export'
+  | 'system';
+
+export interface ActivityLog {
+  id: string;
+  created_at: string;
+  user_id?: string | null;
+  user_email: string;
+  user_name: string;
+  user_role: UserRole | string;
+  action: ActivityAction;
+  entity_type: ActivityEntityType;
+  entity_id?: string | null;
+  summary: string;
+  details?: Record<string, any>;
+}
+

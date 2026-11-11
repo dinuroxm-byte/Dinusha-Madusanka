@@ -29,6 +29,7 @@ import {
   addPartnerHotelToCloud,
   deletePartnerHotelFromCloud,
   fetchPartnerHotels,
+  logActivity,
   restoreDefaultPartnerHotelsCloud,
   updatePartnerHotelInCloud
 } from '../utils/supabaseStorage';
@@ -191,6 +192,20 @@ export const PartnerHotelsModal: React.FC<PartnerHotelsModalProps> = ({
         return;
       }
 
+      logActivity({
+        action: 'UPDATE_HOTEL',
+        entity_type: 'hotel',
+        entity_id: `${trimmedName}_${trimmedDest}`,
+        summary: `Updated partner hotel "${trimmedName}" in ${trimmedDest} (${category})`,
+        details: {
+          previous_name: editingHotel.name,
+          new_name: trimmedName,
+          destination: trimmedDest,
+          category
+        },
+        user: currentUser
+      });
+
       showToast(res.message);
       setEditingHotel(null);
       setName('');
@@ -209,6 +224,19 @@ export const PartnerHotelsModal: React.FC<PartnerHotelsModalProps> = ({
         setFormError(res.message);
         return;
       }
+
+      logActivity({
+        action: 'ADD_HOTEL',
+        entity_type: 'hotel',
+        entity_id: `${trimmedName}_${trimmedDest}`,
+        summary: `Added partner hotel "${trimmedName}" in ${trimmedDest} (${category}) to directory`,
+        details: {
+          name: trimmedName,
+          destination: trimmedDest,
+          category
+        },
+        user: currentUser
+      });
 
       showToast(res.message);
       const addedFormatted = `${trimmedName} - ${trimmedDest}`;
@@ -242,6 +270,19 @@ export const PartnerHotelsModal: React.FC<PartnerHotelsModalProps> = ({
       handleCancelEdit();
     }
 
+    logActivity({
+      action: 'DELETE_HOTEL',
+      entity_type: 'hotel',
+      entity_id: `${target.name}_${target.destination}`,
+      summary: `Removed partner hotel "${target.name}" (${target.destination}) from directory`,
+      details: {
+        name: target.name,
+        destination: target.destination,
+        category: target.category
+      },
+      user: currentUser
+    });
+
     refreshHotels();
     showToast(res.message || `Deleted "${target.name}" from partner directory.`);
   };
@@ -252,6 +293,14 @@ export const PartnerHotelsModal: React.FC<PartnerHotelsModalProps> = ({
     setIsRestoreConfirmOpen(false);
     handleCancelEdit();
     refreshHotels();
+
+    logActivity({
+      action: 'RESTORE_HOTELS',
+      entity_type: 'hotel',
+      summary: 'Restored partner hotel catalog to default Sri Lanka hotel inventory',
+      user: currentUser
+    });
+
     showToast(res.message);
   };
 
