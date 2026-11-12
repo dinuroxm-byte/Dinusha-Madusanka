@@ -20,9 +20,12 @@ import { SavedModal } from './components/SavedModal';
 import { TermsSection } from './components/TermsSection';
 import { TransportationSection } from './components/TransportationSection';
 import { UserManagementModal } from './components/UserManagementModal';
+import { PasswordRecoveryModal } from './components/PasswordRecoveryModal';
+import { HotelRatesModal } from './components/HotelRatesModal';
 import { VoucherModal } from './components/VoucherModal';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
+import { calculateRoomRate, loadSavedHotelRates, saveHotelRatesToLocal } from './utils/hotelRates';
 import {
   CloudSyncStatus,
   CompanyDetails,
@@ -32,6 +35,7 @@ import {
   DEFAULT_TERMS,
   GuideDetails,
   HOTELS,
+  HotelRateCard,
   IT_CLOSE,
   IT_GREET,
   ItineraryData,
@@ -248,6 +252,9 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
   const [isActivityLogsOpen, setIsActivityLogsOpen] = useState(false);
+  const [isPasswordRecoveryOpen, setIsPasswordRecoveryOpen] = useState(false);
+  const [isHotelRatesModalOpen, setIsHotelRatesModalOpen] = useState(false);
+  const [hotelRateCards, setHotelRateCards] = useState<HotelRateCard[]>(() => loadSavedHotelRates());
 
   const [isSavedModalOpen, setIsSavedModalOpen] = useState(false);
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
@@ -364,9 +371,26 @@ export default function App() {
     });
 
     // 2. Auth changes listener
+    if (window.location.hash.includes('type=recovery')) {
+      setIsPasswordRecoveryOpen(true);
+    } else if (window.location.hash.includes('error=')) {
+      try {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const desc = hashParams.get('error_description');
+        if (desc) {
+          showToast(`Notice: ${decodeURIComponent(desc).replace(/\+/g, ' ')}`);
+        }
+      } catch (_) {}
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecoveryOpen(true);
+      }
+
       if (session?.user) {
         const profile = await fetchUserProfile(session.user.id);
         const resolvedUser: UserProfile = profile || {
@@ -1326,6 +1350,8 @@ export default function App() {
         customerCount={customers.length}
         currentUser={currentUser}
         syncStatus={syncStatus}
+        hotelRatesCount={hotelRateCards.length}
+        onOpenHotelRates={() => setIsHotelRatesModalOpen(true)}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onSignOut={handleSignOut}
         onOpenUserManagement={() => setIsUserManagementOpen(true)}
@@ -1402,6 +1428,8 @@ export default function App() {
             days={pax.days}
             travelDate={customer.travelDate}
             usdRate={pricing.usdRate || 305}
+            rateCards={hotelRateCards}
+            onOpenRateCardsModal={() => setIsHotelRatesModalOpen(true)}
             onNightsChange={handleNightsChange}
             onOpenVoucher={nightNum => {
               setActiveVoucherNight(nightNum);
@@ -1551,6 +1579,44 @@ export default function App() {
         isOpen={isUserManagementOpen}
         currentUser={currentUser}
         onClose={() => setIsUserManagementOpen(false)}
+        showToast={showToast}
+      />
+
+      <PasswordRecoveryModal
+        isOpen={isPasswordRecoveryOpen}
+        onClose={() => setIsPasswordRecoveryOpen(false)}
+        showToast={showToast}
+      />
+
+      <HotelRatesModal
+        isOpen={isHotelRatesModalOpen}
+        onClose={() => setIsHotelRatesModalOpen(false)}
+        rateCards={hotelRateCards}
+        onRateCardsChange={(cards) => {
+          setHotelRateCards(cards);
+          saveHotelRatesToLocal(cards);
+        }}
+        onApplyToNights={() => {
+          let updatedCount = 0;
+          const updated = nights.map(night => ({
+            ...night,
+            rooms: night.rooms.map(room => {
+              if (!room.hotel) return room;
+              const calc = calculateRoomRate(room, hotelRateCards, pricing.usdRate || 305);
+              if (calc.hotelMatched && calc.totalUsd > 0) {
+                updatedCount++;
+                return {
+                  ...room,
+                  costUsd: calc.totalUsd,
+                  cost: calc.totalLkr
+                };
+              }
+              return room;
+            })
+          }));
+          handleNightsChange(updated);
+          showToast(`Applied hotel rates to ${updatedCount} room(s)!`);
+        }}
         showToast={showToast}
       />
 

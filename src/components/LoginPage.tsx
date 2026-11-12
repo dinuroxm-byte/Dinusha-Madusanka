@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   Building2,
@@ -41,6 +41,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [resetSuccessMsg, setResetSuccessMsg] = useState('');
 
   const isConfigured = isSupabaseConfigured();
+
+  // Detect expired or invalid email links (e.g. otp_expired)
+  useEffect(() => {
+    if (window.location.hash && window.location.hash.includes('error=')) {
+      try {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const code = hashParams.get('error_code');
+        const desc = hashParams.get('error_description');
+        if (code === 'otp_expired' || (desc && desc.toLowerCase().includes('expired'))) {
+          setErrorMsg(
+            'The password reset link has expired or has already been consumed. Email security filters or clicking a link twice consumes one-time tokens. Please request a fresh reset link below.'
+          );
+          setIsResetMode(true);
+        } else if (desc) {
+          setErrorMsg(decodeURIComponent(desc).replace(/\+/g, ' '));
+        }
+      } catch (_) {}
+      // Clear hash from URL to keep address bar clean
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,8 +151,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     setIsLoading(true);
     try {
+      const redirectUrl = window.location.origin + window.location.pathname;
       const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: window.location.origin
+        redirectTo: redirectUrl
       });
 
       if (error) {

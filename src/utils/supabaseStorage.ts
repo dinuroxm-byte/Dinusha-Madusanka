@@ -151,32 +151,80 @@ export async function adminDeleteStaffAccount(
   }
 
   try {
-    const { data, error } = await supabase.rpc('admin_delete_staff_user', {
-      target_user_id: targetUserId
-    });
+    // 1. Attempt to invoke the secure Supabase Edge Function 'delete-staff-user'
+    // It verifies caller's JWT role as ADMIN and calls auth.admin.deleteUser(targetUserId)
+    // using SUPABASE_SERVICE_ROLE_KEY on the server.
+    let edgeFnFailed = false;
+    let edgeErrMsg = '';
 
-    if (error) {
-      console.warn('RPC admin_delete_staff_user error, attempting fallback profile deletion:', error.message);
-      const { error: directError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', targetUserId)
-        .neq('role', 'ADMIN');
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-staff-user', {
+        body: { targetUserId }
+      });
 
-      if (directError) {
-        return { success: false, message: error.message || directError.message };
+      if (!error && data?.success && data?.authDeleted) {
+        return {
+          success: true,
+          message: data.message || 'Staff member permanently deleted from authentication and database.'
+        };
+      }
+
+      if (error) {
+        edgeFnFailed = true;
+        edgeErrMsg = error.message || '';
+        if ('context' in error && (error as any).context) {
+          try {
+            const bodyJson = await (error as any).context.json();
+            if (bodyJson?.error) edgeErrMsg = bodyJson.error;
+          } catch (_) {}
+        }
+      }
+    } catch (e: any) {
+      edgeFnFailed = true;
+      edgeErrMsg = e?.message || '';
+    }
+
+    // 2. If Edge Function is not yet deployed (404 / failed to connect),
+    // fallback to the database stored procedure 'admin_delete_staff_user'
+    if (
+      edgeFnFailed ||
+      edgeErrMsg.includes('404') ||
+      edgeErrMsg.toLowerCase().includes('failed to send a request') ||
+      edgeErrMsg.toLowerCase().includes('functions fetch error')
+    ) {
+      console.info("Edge function 'delete-staff-user' not reachable; attempting database RPC 'admin_delete_staff_user'...");
+
+      const { data: rpcData, error: rpcError } = await supabase.rpc('admin_delete_staff_user', {
+        target_user_id: targetUserId
+      });
+
+      if (!rpcError && rpcData?.success) {
+        return {
+          success: true,
+          message: rpcData.message || 'Staff member permanently deleted from authentication and database.'
+        };
+      }
+
+      if (rpcError) {
+        console.error('admin_delete_staff_user RPC error:', rpcError);
+        return {
+          success: false,
+          message:
+            rpcError.message ||
+            "Please deploy the 'delete-staff-user' Edge Function via CLI, or run the admin_delete_staff_user script in your Supabase SQL Editor."
+        };
       }
     }
 
     return {
-      success: true,
-      message: data?.message || 'Staff account deleted successfully.'
+      success: false,
+      message: edgeErrMsg || 'Failed to delete staff Authentication account.'
     };
   } catch (err: any) {
-    console.error('Failed to delete staff account:', err);
+    console.error('Failed to execute staff deletion:', err);
     return {
       success: false,
-      message: err.message || 'Could not delete staff account.'
+      message: err?.message || 'Could not delete staff account. Please verify database connection.'
     };
   }
 }

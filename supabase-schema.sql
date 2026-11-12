@@ -83,7 +83,7 @@ create table if not exists public.company_settings (
   logo_data text default null,
   terms_config jsonb not null default '{}'::jsonb,
   updated_at timestamptz default now(),
-  updated_by uuid references auth.users(id)
+  updated_by uuid references auth.users(id) on delete set null
 );
 
 alter table public.company_settings enable row level security;
@@ -124,7 +124,7 @@ create table if not exists public.quotations (
   fin_lkr numeric not null default 0,
   fin_usd numeric not null default 0,
   quotation_data jsonb not null,
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   created_by_name text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -164,7 +164,7 @@ create table if not exists public.customers (
   quote_ids text[] default '{}',
   created_date timestamptz default now(),
   last_quoted_date timestamptz default now(),
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   updated_at timestamptz default now()
 );
 
@@ -330,21 +330,37 @@ begin
   from public.profiles
   where id = target_user_id;
 
-  if target_role is null then
-    raise exception 'User not found in profiles.';
+  -- If profile is missing (orphaned auth account), inspect auth.users
+  if target_email is null then
+    select email into target_email from auth.users where id = target_user_id;
+    if target_email is null then
+      raise exception 'Target user not found in database or authentication.';
+    end if;
+  end if;
+
+  -- 4. Protect the primary Admin account dinusha@voyalankatours.com
+  if lower(coalesce(target_email, '')) = 'dinusha@voyalankatours.com' then
+    raise exception 'Permission denied: The primary administrator account (dinusha@voyalankatours.com) is protected and cannot be deleted.';
   end if;
 
   if target_role = 'ADMIN' then
     raise exception 'Permission denied: Administrator accounts cannot be deleted through staff management.';
   end if;
 
-  -- 4. Delete target user from public.profiles and auth.users
+  -- 5. Safeguard: Detach foreign-key references from business tables to preserve historical records
+  update public.quotations set created_by = null where created_by = target_user_id;
+  update public.customers set created_by = null where created_by = target_user_id;
+  update public.company_settings set updated_by = null where updated_by = target_user_id;
+  delete from public.user_drafts where user_id = target_user_id;
+
+  -- 6. Delete target user from public.profiles and permanently purge from auth.users
   delete from public.profiles where id = target_user_id;
   delete from auth.users where id = target_user_id;
 
   return jsonb_build_object(
     'success', true,
-    'message', format('Staff account (%s) deleted successfully.', target_email)
+    'authDeleted', true,
+    'message', format('Staff account (%s) permanently deleted from authentication and database.', coalesce(target_email, target_user_id::text))
   );
 end;
 $$;

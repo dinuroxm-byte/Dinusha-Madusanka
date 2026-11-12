@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -6,8 +6,10 @@ import {
   Calendar,
   Copy,
   FileCheck,
+  FileSpreadsheet,
   Hotel,
   Plus,
+  Sparkles,
   Trash2,
   Utensils
 } from 'lucide-react';
@@ -15,6 +17,7 @@ import {
   BED_TYPES,
   HOTEL_CATEGORIES,
   HOTELS,
+  HotelRateCard,
   MEAL_PLANS,
   NightConfig,
   ROOM_CATEGORIES,
@@ -23,12 +26,15 @@ import {
 } from '../types';
 import { HotelAutocomplete } from './HotelAutocomplete';
 import { PartnerHotelsModal } from './PartnerHotelsModal';
+import { calculateRoomRate } from '../utils/hotelRates';
 
 interface AccommodationSectionProps {
   nights: NightConfig[];
   days: number;
   travelDate?: string;
   usdRate?: number;
+  rateCards?: HotelRateCard[];
+  onOpenRateCardsModal?: () => void;
   onNightsChange: (nights: NightConfig[], newDays?: number) => void;
   onOpenVoucher: (nightNumber: number) => void;
   onSetAllHalfBoard: () => void;
@@ -40,6 +46,8 @@ export const AccommodationSection: React.FC<AccommodationSectionProps> = ({
   days,
   travelDate,
   usdRate = 305,
+  rateCards = [],
+  onOpenRateCardsModal,
   onNightsChange,
   onOpenVoucher,
   onSetAllHalfBoard,
@@ -48,7 +56,7 @@ export const AccommodationSection: React.FC<AccommodationSectionProps> = ({
   const [isPartnerModalOpen, setIsPartnerModalOpen] = useState(false);
   const nightCount = Math.max(0, days - 1);
 
-  const getNightDateFormatted = (nightNum: number, shortFormat = false): string => {
+  const getNightDateObject = (nightNum: number): Date => {
     let d0: Date;
     if (travelDate) {
       d0 = new Date(travelDate + 'T00:00:00');
@@ -58,7 +66,13 @@ export const AccommodationSection: React.FC<AccommodationSectionProps> = ({
     } else {
       d0 = new Date();
     }
-    d0.setDate(d0.getDate() + (nightNum - 1));
+    const target = new Date(d0);
+    target.setDate(target.getDate() + (nightNum - 1));
+    return target;
+  };
+
+  const getNightDateFormatted = (nightNum: number, shortFormat = false): string => {
+    const d0 = getNightDateObject(nightNum);
 
     if (shortFormat) {
       return d0.toLocaleDateString('en-GB', {
@@ -76,6 +90,39 @@ export const AccommodationSection: React.FC<AccommodationSectionProps> = ({
     });
   };
 
+  // Automatically update prices according to valid dates when travelDate changes
+  const prevTravelDateRef = useRef(travelDate);
+  useEffect(() => {
+    if (prevTravelDateRef.current === travelDate) return;
+    prevTravelDateRef.current = travelDate;
+
+    if (!rateCards || !rateCards.length || !travelDate) return;
+
+    let hasChanges = false;
+    const updated = nights.map((night, nIdx) => {
+      const nightDate = getNightDateObject(night.nightNumber || nIdx + 1);
+      const updatedRooms = night.rooms.map(room => {
+        if (!room.hotel) return room;
+        const calc = calculateRoomRate(room, rateCards, usdRate, nightDate);
+        if (calc.hotelMatched && calc.totalUsd > 0 && calc.totalUsd !== room.costUsd) {
+          hasChanges = true;
+          return {
+            ...room,
+            costUsd: calc.totalUsd,
+            cost: calc.totalLkr
+          };
+        }
+        return room;
+      });
+      return { ...night, rooms: updatedRooms };
+    });
+
+    if (hasChanges) {
+      onNightsChange(updated);
+      showToast(`Hotel prices automatically updated for travel date (${travelDate})!`);
+    }
+  }, [travelDate, rateCards, usdRate]);
+
   const handleRoomChange = (
     nightIdx: number,
     roomIdx: number,
@@ -84,10 +131,69 @@ export const AccommodationSection: React.FC<AccommodationSectionProps> = ({
     const updated = [...nights];
     const targetNight = { ...updated[nightIdx] };
     const targetRooms = [...targetNight.rooms];
-    targetRooms[roomIdx] = { ...targetRooms[roomIdx], ...fields };
+    const currentRoom = targetRooms[roomIdx];
+    const candidateRoom = { ...currentRoom, ...fields };
+
+    // Check if hotel, bedType, meal, roomCategory, or roomView changed
+    const relevantKeys = ['hotel', 'category', 'meal', 'bedType', 'roomCategory', 'roomView'];
+    const hasFieldChange = Object.keys(fields).some(k => relevantKeys.includes(k));
+
+    // If candidate has a hotel and rate cards exist, and cost was not manually typed in this change
+    if (
+      hasFieldChange &&
+      rateCards &&
+      rateCards.length > 0 &&
+      candidateRoom.hotel &&
+      fields.cost === undefined &&
+      fields.costUsd === undefined
+    ) {
+      const nightDate = getNightDateObject(targetNight.nightNumber || nightIdx + 1);
+      const calc = calculateRoomRate(candidateRoom, rateCards, usdRate, nightDate);
+      if (calc.hotelMatched && calc.totalUsd > 0) {
+        fields.costUsd = calc.totalUsd;
+        fields.cost = calc.totalLkr;
+      }
+    }
+
+    targetRooms[roomIdx] = { ...currentRoom, ...fields };
     targetNight.rooms = targetRooms;
     updated[nightIdx] = targetNight;
     onNightsChange(updated);
+  };
+
+  const handleAutoPriceAllNights = () => {
+    if (!rateCards || !rateCards.length) {
+      showToast('No hotel rate cards loaded yet. Please upload an Excel sheet first.');
+      return;
+    }
+
+    let pricedCount = 0;
+    const updated = nights.map((night, nIdx) => {
+      const nightDate = getNightDateObject(night.nightNumber || nIdx + 1);
+      return {
+        ...night,
+        rooms: night.rooms.map(room => {
+          if (!room.hotel) return room;
+          const calc = calculateRoomRate(room, rateCards, usdRate, nightDate);
+          if (calc.hotelMatched && calc.totalUsd > 0) {
+            pricedCount++;
+            return {
+              ...room,
+              costUsd: calc.totalUsd,
+              cost: calc.totalLkr
+            };
+          }
+          return room;
+        })
+      };
+    });
+
+    onNightsChange(updated);
+    if (pricedCount > 0) {
+      showToast(`Auto-priced ${pricedCount} room(s) according to their night validity dates!`);
+    } else {
+      showToast('No matching hotels found in rate cards for current nights.');
+    }
   };
 
   const handleCloneRoom = (nightIdx: number, roomIdx: number) => {
@@ -131,6 +237,16 @@ export const AccommodationSection: React.FC<AccommodationSectionProps> = ({
       roomView: 'Garden View',
       cost: 28000
     };
+
+    if (rateCards && rateCards.length > 0) {
+      const nightDate = getNightDateObject(targetNight.nightNumber || nightIdx + 1);
+      const calc = calculateRoomRate(newRoom, rateCards, usdRate, nightDate);
+      if (calc.hotelMatched && calc.totalUsd > 0) {
+        newRoom.costUsd = calc.totalUsd;
+        newRoom.cost = calc.totalLkr;
+      }
+    }
+
     targetNight.rooms = [...targetNight.rooms, newRoom];
     updated[nightIdx] = targetNight;
     onNightsChange(updated);
@@ -211,6 +327,35 @@ export const AccommodationSection: React.FC<AccommodationSectionProps> = ({
             <Plus className="w-3.5 h-3.5 text-emerald-400" />
             <span>+ Add Night</span>
           </button>
+
+          {onOpenRateCardsModal && (
+            <button
+              type="button"
+              onClick={onOpenRateCardsModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-teal-800/80 bg-teal-950/70 hover:bg-teal-900/80 text-teal-300 transition-colors whitespace-nowrap cursor-pointer shadow-sm"
+              title="Upload and inspect Excel Hotel Rate Cards"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-teal-400" />
+              <span>Hotel Rates (Excel)</span>
+              {rateCards && rateCards.length > 0 && (
+                <span className="bg-teal-500 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full">
+                  {rateCards.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          {rateCards && rateCards.length > 0 && (
+            <button
+              type="button"
+              onClick={handleAutoPriceAllNights}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-800/80 bg-amber-950/50 hover:bg-amber-900/60 text-amber-300 transition-colors whitespace-nowrap cursor-pointer shadow-sm"
+              title="Calculate prices for all nights using loaded Excel rate cards"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Auto-Price Nights</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -506,9 +651,31 @@ export const AccommodationSection: React.FC<AccommodationSectionProps> = ({
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                            Room Rate / Night (USD)
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[11px] font-medium text-slate-400">
+                              Room Rate / Night (USD)
+                            </label>
+                            {(() => {
+                              const nightDate = getNightDateObject(night.nightNumber || nightIdx + 1);
+                              const calc = calculateRoomRate(room, rateCards || [], usdRate, nightDate);
+                              if (calc.hotelMatched && calc.totalUsd > 0 && (room.costUsd === undefined || room.costUsd !== calc.totalUsd)) {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRoomChange(nightIdx, roomIdx, {
+                                      costUsd: calc.totalUsd,
+                                      cost: calc.totalLkr
+                                    })}
+                                    className="text-[9px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                                    title="Click to apply Excel rate"
+                                  >
+                                    Apply ${calc.totalUsd}
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
                           <div className="relative">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400">
                               $
@@ -546,6 +713,43 @@ export const AccommodationSection: React.FC<AccommodationSectionProps> = ({
                               ≈ LKR {(room.cost || 0).toLocaleString()}
                             </span>
                           )}
+
+                          {(() => {
+                            const nightDate = getNightDateObject(night.nightNumber || nightIdx + 1);
+                            const calc = calculateRoomRate(room, rateCards || [], usdRate, nightDate);
+                            if (calc.hotelMatched && calc.totalUsd > 0) {
+                              return (
+                                <div className="mt-1.5 p-1.5 bg-emerald-950/60 border border-emerald-800/60 rounded-lg text-[10px] space-y-1 animate-in fade-in">
+                                  <div className="flex items-center justify-between text-emerald-300 font-bold">
+                                    <span className="flex items-center gap-1">
+                                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                                      <span>Excel Rate Matched:</span>
+                                    </span>
+                                    <span className="text-emerald-400 font-extrabold">${calc.totalUsd}</span>
+                                  </div>
+                                  {calc.validDateRangeStr && (
+                                    <div className="flex items-center flex-wrap gap-1 text-[9px] text-amber-300 font-medium bg-amber-950/40 border border-amber-800/50 px-1.5 py-0.5 rounded">
+                                      <Calendar className="w-2.5 h-2.5 shrink-0 text-amber-400" />
+                                      <span>Validity: {calc.validDateRangeStr}</span>
+                                      {nightDate && (
+                                        <span className="text-slate-400">
+                                          (Date: {nightDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })})
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  <div className="text-[9px] text-slate-300 leading-relaxed font-mono">
+                                    <span className="text-slate-400">Bed:</span> ${calc.breakdown.bed.rate} +{' '}
+                                    <span className="text-slate-400">Meal:</span> ${calc.breakdown.meal.rate} +{' '}
+                                    <span className="text-slate-400">Category:</span> ${calc.breakdown.category.rate} +{' '}
+                                    <span className="text-slate-400">View:</span> ${calc.breakdown.view.rate} ={' '}
+                                    <span className="text-emerald-300 font-bold">${calc.totalUsd}</span>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                       </div>
                     </div>

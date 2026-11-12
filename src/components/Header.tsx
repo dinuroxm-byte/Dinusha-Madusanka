@@ -32,6 +32,8 @@ interface HeaderProps {
   customerCount: number;
   currentUser: UserProfile | null;
   syncStatus: CloudSyncStatus;
+  hotelRatesCount?: number;
+  onOpenHotelRates?: () => void;
   onOpenAuth: () => void;
   onSignOut: () => void;
   onOpenUserManagement: () => void;
@@ -58,6 +60,8 @@ export const Header: React.FC<HeaderProps> = ({
   customerCount,
   currentUser,
   syncStatus,
+  hotelRatesCount = 0,
+  onOpenHotelRates,
   onOpenAuth,
   onSignOut,
   onOpenUserManagement,
@@ -238,6 +242,22 @@ export const Header: React.FC<HeaderProps> = ({
                 {customerCount}
               </span>
             </button>
+
+            {onOpenHotelRates && (
+              <button
+                onClick={onOpenHotelRates}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-teal-800/80 bg-teal-950/40 hover:bg-teal-900/60 text-teal-300 transition-colors cursor-pointer"
+                title="Hotel contract rates and Excel auto-pricing"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-teal-400" />
+                <span>Hotel Rates</span>
+                {hotelRatesCount > 0 && (
+                  <span className="bg-teal-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                    {hotelRatesCount}
+                  </span>
+                )}
+              </button>
+            )}
 
             <button
               onClick={onPreviewOnlineProposal}

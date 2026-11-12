@@ -227,6 +227,7 @@ export const HOTEL_CATEGORIES = [
 ];
 
 export const MEAL_PLANS = [
+  "Room Only",
   "Bed & Breakfast",
   "Half-Board",
   "Full Board"
@@ -243,9 +244,10 @@ export const BED_TYPES = [
 
 export const ROOM_CATEGORIES = [
   "Standard Room",
-  "Sea View Room",
+  "Delux Room",
   "Deluxe Room",
   "Superior Room",
+  "Executive room",
   "Executive Suite"
 ];
 
@@ -253,9 +255,40 @@ export const ROOM_VIEWS = [
   "Garden View",
   "Sea View",
   "Mountain View",
+  "City View",
   "Pool View",
   "Lagoon View"
 ];
+
+export interface HotelRateCard {
+  id: string;
+  hotelName: string;
+  hotelCategory?: string;
+  validFrom?: string; // YYYY-MM-DD
+  validTo?: string;   // YYYY-MM-DD
+  validDateRangeStr?: string; // e.g. "01.11.2026-11.11.2026"
+  bedRates: Record<string, number>;
+  mealRates: Record<string, number>;
+  roomCategoryRates: Record<string, number>;
+  roomViewRates: Record<string, number>;
+  currency: 'USD' | 'LKR';
+  updatedAt?: string;
+}
+
+export interface CalculatedHotelRate {
+  hotelMatched: boolean;
+  rateCard?: HotelRateCard;
+  validDateRangeStr?: string;
+  nightDateFormatted?: string;
+  totalUsd: number;
+  totalLkr: number;
+  breakdown: {
+    bed: { name: string; rate: number };
+    meal: { name: string; rate: number };
+    category: { name: string; rate: number };
+    view: { name: string; rate: number };
+  };
+}
 
 export interface VehicleOption {
   label: string;

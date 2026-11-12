@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react';
 import { UserProfile, UserRole } from '../types';
+import { supabase } from '../lib/supabase';
 import {
   adminCreateStaffAccount,
   adminDeleteStaffAccount,
@@ -54,6 +55,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   // Staff account deletion state
   const [deletingUser, setDeletingUser] = useState<UserProfile | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  // Admin password change state
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -71,13 +79,63 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     if (isOpen) {
       loadUsers();
       setIsAddingNew(false);
+      setIsChangingPassword(false);
       setDeletingUser(null);
       setFormError('');
       setFormSuccess('');
+      setNewPassword('');
+      setConfirmPassword('');
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+    setFormSuccess('');
+
+    if (!newPassword || newPassword.length < 6) {
+      setFormError('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setFormError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        setFormError(error.message);
+        return;
+      }
+
+      logActivity({
+        action: 'UPDATE_COMPANY',
+        entity_type: 'user',
+        entity_id: currentUser?.email || 'admin',
+        summary: `Administrator updated account password (${currentUser?.email})`,
+        details: { email: currentUser?.email },
+        user: currentUser
+      });
+
+      setFormSuccess('Admin account password has been updated successfully!');
+      showToast('Admin password updated successfully.');
+      setNewPassword('');
+      setConfirmPassword('');
+      setIsChangingPassword(false);
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to update password.');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
 
   const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,25 +198,29 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const handleDeleteStaff = async () => {
     if (!deletingUser) return;
+    setDeleteError('');
 
     // Rule 1: Only administrators can delete staff accounts
     if (currentUser?.role !== 'ADMIN') {
-      showToast('Unauthorized: Only administrators can delete staff accounts.');
-      setDeletingUser(null);
+      const msg = 'Unauthorized: Only administrators can delete staff accounts.';
+      setDeleteError(msg);
+      showToast(msg);
       return;
     }
 
     // Rule 2: Staff and admins cannot delete their own accounts
     if (currentUser.id === deletingUser.id) {
-      showToast('Operation forbidden: You cannot delete your own account.');
-      setDeletingUser(null);
+      const msg = 'Operation forbidden: You cannot delete your own account.';
+      setDeleteError(msg);
+      showToast(msg);
       return;
     }
 
     // Rule 3: Protected admin accounts
     if (deletingUser.role === 'ADMIN') {
-      showToast('Permission denied: Administrator accounts cannot be deleted.');
-      setDeletingUser(null);
+      const msg = 'Permission denied: Administrator accounts cannot be deleted.';
+      setDeleteError(msg);
+      showToast(msg);
       return;
     }
 
@@ -186,13 +248,17 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         showToast(`Staff account for "${deletingUser.fullName}" has been deleted.`);
         setFormSuccess(`Staff account for "${deletingUser.fullName}" deleted successfully.`);
         setDeletingUser(null);
+        setDeleteError('');
         await loadUsers();
       } else {
+        setDeleteError(res.message);
         setFormError(res.message);
         showToast(res.message);
       }
     } catch (err: any) {
-      setFormError(err.message || 'Could not delete staff account.');
+      const errText = err.message || 'Could not delete staff account.';
+      setDeleteError(errText);
+      setFormError(errText);
     } finally {
       setIsDeleting(false);
     }
@@ -254,7 +320,22 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  setIsChangingPassword(!isChangingPassword);
+                  setIsAddingNew(false);
+                  setFormError('');
+                  setFormSuccess('');
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+                title="Change Admin Account Password"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span>{isChangingPassword ? 'Cancel' : 'Change Password'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setIsAddingNew(!isAddingNew);
+                  setIsChangingPassword(false);
                   setFormError('');
                   setFormSuccess('');
                 }}
@@ -265,6 +346,99 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Change Admin Password Accordion */}
+          {isChangingPassword && (
+            <form
+              onSubmit={handleUpdatePassword}
+              className="bg-slate-950/80 border border-amber-500/30 rounded-xl p-4.5 space-y-4 animate-in fade-in slide-in-from-top-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span>Update Admin Password ({currentUser?.email})</span>
+                </div>
+                <span className="text-[11px] text-slate-400">Min. 6 characters</span>
+              </div>
+
+              {formError && (
+                <div className="p-3 rounded-lg bg-rose-950/50 border border-rose-500/40 text-xs text-rose-300 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      required
+                      minLength={6}
+                      className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      required
+                      minLength={6}
+                      className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsChangingPassword(false);
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setFormError('');
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingPassword}
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isUpdatingPassword ? (
+                    <>
+                      <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Save New Password</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* Add Staff Form Accordion */}
           {isAddingNew && (
@@ -481,11 +655,21 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 <div>• Staff cannot delete their own accounts; this action is performed by an Administrator.</div>
               </div>
 
+              {deleteError && (
+                <div className="p-3 bg-rose-950/60 border border-rose-800/80 rounded-xl text-xs text-rose-300 flex items-start gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed whitespace-pre-line">{deleteError}</div>
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   disabled={isDeleting}
-                  onClick={() => setDeletingUser(null)}
+                  onClick={() => {
+                    setDeletingUser(null);
+                    setDeleteError('');
+                  }}
                   className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer disabled:opacity-50"
                 >
                   Cancel
